@@ -70,7 +70,7 @@ void HSMA::init()
 {
   printf("Setting up FMM implemented by Greengard (Release 1.0.0)\n");
 
-  //ÉèÖÃ²âÊÔµãµÄÎ»ÖÃ
+  //è®¾ç½®æµ‹è¯•ç‚¹çš„ä½ç½®
   //double srun1[Nw][3],srun2[Nw][3];
   //PointSum = srun1;
   //QuizSum = srun2;
@@ -119,7 +119,7 @@ void HSMA::init()
 	  }
   }
 
-  //¼ÆËã²âÊÔµãµÄ¾Ö²¿Õ¹¿ª»ù
+  //è®¡ç®—æµ‹è¯•ç‚¹çš„å±€éƒ¨å±•å¼€åŸº
   A = new double* [Nw];
   PointSumMultipleExpansionMatrix = new double[p * p];
   QuizSumMultipleExpansionMatrix = new double[p * p];
@@ -188,7 +188,7 @@ void HSMA::compute(int eflag, int vflag)
 	// return if there are no charges
 	if (qsqsum == 0.0) return;
 
-  //ÉèÖÃÁ£×ÓÊý ×ø±ê ´øµçÁ¿ Á¦µÄ½Ó¿Ú	
+  //è®¾ç½®ç²’å­æ•° åæ ‡ å¸¦ç”µé‡ åŠ›çš„æŽ¥å£	
   double **x = atom->x;
   double *q = atom->q;
   int nlocal = atom->nlocal;
@@ -235,9 +235,9 @@ void HSMA::compute(int eflag, int vflag)
 	  //if (me == 0)cout << "Time for Final is " << time << endl;
 	  //time = MPI_Wtime();
 
-	  //Find the image charge(ÕâÀïÃ¿¸öºËÖ»´æ´¢¾Ö²¿µÄ¾µÏñ)
+	  //Find the image charge(è¿™é‡Œæ¯ä¸ªæ ¸åªå­˜å‚¨å±€éƒ¨çš„é•œåƒ)
 	  int lx = ceil((Rs - Lx / 2) / Lx), ly = ceil((Rs - Ly / 2) / Ly), lz = ceil((Rs - Lz / 2) / Lz);
-	  int TotalNumber = ceil(nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//¼õÉÙ´æ´¢Á¿ÏûºÄ
+	  int TotalNumber = ceil(nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//å‡å°‘å­˜å‚¨é‡æ¶ˆè€—
 	  double ImageCharge[TotalNumber][4];
 	  int ImageNumber;
 	  SetImageCharge(ImageCharge, &ImageNumber, (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1), X, Q, nlocal, Rs, Lx, Ly, Lz, lx, ly, lz);
@@ -309,7 +309,7 @@ void HSMA::compute(int eflag, int vflag)
 
 	  double AllSource[maxatom][3], AllQ[maxatom];
 
-	  //ÊÕ¼¯È«²¿Á£×ÓµÄÐÅÏ¢
+	  //æ”¶é›†å…¨éƒ¨ç²’å­çš„ä¿¡æ¯
 	  int nlocal_All[RankID], nlocal_All_Q[RankID];
 	  MPI_Allgather(&nlocal, 1, MPI_INT, nlocal_All, 1, MPI_INT, world);
 	  int Size_All[RankID], Size_All_Q[RankID];
@@ -354,9 +354,9 @@ void HSMA::compute(int eflag, int vflag)
 	  MPI_Iallgatherv((double*)X, nlocal * 3, MPI_DOUBLE, (double*)AllSource, nlocal_All, Size_All, MPI_DOUBLE, world, &request);
 	  MPI_Iallgatherv((double*)Q, nlocal, MPI_DOUBLE, (double*)AllQ, nlocal_All_Q, Size_All_Q, MPI_DOUBLE, world, &request_Q);
 
-	  //Find the image charge(ÕâÀïÃ¿¸öºËÖ»´æ´¢¾Ö²¿µÄ¾µÏñ)
+	  //Find the image charge(è¿™é‡Œæ¯ä¸ªæ ¸åªå­˜å‚¨å±€éƒ¨çš„é•œåƒ)
 	  int lx = ceil((Rs - Lx / 2) / Lx), ly = ceil((Rs - Ly / 2) / Ly), lz = ceil((Rs - Lz / 2) / Lz);
-	  int TotalNumber = ceil(nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//¼õÉÙ´æ´¢Á¿ÏûºÄ
+	  int TotalNumber = ceil(nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//å‡å°‘å­˜å‚¨é‡æ¶ˆè€—
 	  double ImageCharge[TotalNumber][4];
 	  int ImageNumber;
 	  SetImageCharge(ImageCharge, &ImageNumber, (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1), X, Q, nlocal, Rs, Lx, Ly, Lz, lx, ly, lz);
@@ -395,7 +395,7 @@ void HSMA::compute(int eflag, int vflag)
 
 	  double Energy_HSMA;
 	  double Force[nlocal][3], Pot[nlocal];
-	  TotalNumber = ceil(maxatom * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//¼õÉÙ´æ´¢Á¿ÏûºÄ
+	  TotalNumber = ceil(maxatom * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//å‡å°‘å­˜å‚¨é‡æ¶ˆè€—
 	  double ImageCharge_All[TotalNumber][4];
 	  SetImageCharge(ImageCharge_All, &ImageNumber, (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1), AllSource, AllQ, maxatom, Rs, Lx, Ly, Lz, lx, ly, lz);
 
@@ -680,7 +680,7 @@ void HSMA::CalculateMultipoleExpansion(double* Q, int p, double x, double y, dou
 
 void HSMA::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
 {
-	/*         ÏÈ¼ÆËã²»Çóµ¼µÄ ¿ªÊ¼          */
+	/*         å…ˆè®¡ç®—ä¸æ±‚å¯¼çš„ å¼€å§‹          */
 	double Qold[p * p];
 	Qold[0] = 1.0;
 	Qold[1] = y / 2;
@@ -715,7 +715,7 @@ void HSMA::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, do
 	}
 
 
-	/*         ¼ÆËã²»Çóµ¼µÄ ½áÊø                       */
+	/*         è®¡ç®—ä¸æ±‚å¯¼çš„ ç»“æŸ                       */
 	Q[0] = 0.00;
 	Q[1] = 0.00;
 	Q[2] = -1.0;
@@ -763,7 +763,7 @@ void HSMA::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, do
 
 void HSMA::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
 {
-	/*         ÏÈ?ÆËã²»Çóµ?µÄ ¿ª?          */
+	/*         å…ˆ?æ‰‘æ‚´ç£ºèŸ®?çš„ å¼€?          */
 	double Qold[p * p];
 	Qold[0] = 1.0;
 	Qold[1] = y / 2;
@@ -798,7 +798,7 @@ void HSMA::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y, d
 	}
 
 
-	//¿ª?Çó?²¿·Ö
+	//å¼€?æ±‚?éƒ¨åˆ†
 	Q[0] = 0.00;
 	Q[1] = 0.00;
 	Q[2] = 0.0;
@@ -846,7 +846,7 @@ void HSMA::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y, d
 
 void HSMA::CalculateYDMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
 {
-	/*         ÏÈ?ÆËã²»Çóµ?µÄ ¿ª?          */
+	/*         å…ˆ?æ‰‘æ‚´ç£ºèŸ®?çš„ å¼€?          */
 	double Qold[p * p];
 	Qold[0] = 1.0;
 	Qold[1] = y / 2;
@@ -880,8 +880,8 @@ void HSMA::CalculateYDMultipoleExpansion(double* Q, int p, double x, double y, d
 		}
 	}
 
-	/*         ?ÆËã²»Çóµ?µÄ ?áÊ?                      */
-		//¿ª?Çó?²¿·Ö
+	/*         ?æ‰‘æ‚´ç£ºèŸ®?çš„ ?å´¾?                      */
+		//å¼€?æ±‚?éƒ¨åˆ†
 
 	Q[0] = 0.00;
 	Q[1] = 1.0 / 2.0;
@@ -1057,7 +1057,7 @@ void HSMA::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int Im
 	{
 		double eps = tolerance;
 
-		/*            ¿ªÊ¼ FMM ²ÎÊýÉèÖÃ           */
+		/*            å¼€å§‹ FMM å‚æ•°è®¾ç½®           */
 		int ns = ImageNumber;
 		int nt = Nw * 2;
 		double* source = (double*)malloc(3 * ns * sizeof(double));
@@ -1321,7 +1321,7 @@ double HSMA::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double
 
 		}
 		if (me == 0) {
-			//cout << "¿ªÊ¼   " <<setprecision(16)<< EN[1]<<"   "<<EF[1]<<"    "<<10*(EN[1] + EF[1]) << endl;
+			//cout << "å¼€å§‹   " <<setprecision(16)<< EN[1]<<"   "<<EF[1]<<"    "<<10*(EN[1] + EF[1]) << endl;
 			//cout << ENX[1] + EFX[1] << endl;
 			//cout << ENY[1] + EFY[1] << endl;
 			//cout << ENZ[1] + EFZ[1] << endl;
@@ -1377,7 +1377,7 @@ double HSMA::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double
 			EF[i] = CenterPara * Fibonacci[i][3];
 		}
 
-		/*            ¿ªÊ¼ FMM ²ÎÊýÉèÖÃ           */
+		/*            å¼€å§‹ FMM å‚æ•°è®¾ç½®           */
 		ns = 2 * F + 2;
 		double* sourceF = (double*)malloc(3 * ns * sizeof(double));
 		double* chargeF = (double*)malloc(ns * sizeof(double));
@@ -1423,7 +1423,7 @@ void HSMA::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4],
 	{
 		double eps = tolerance;
 
-		/*            ¿ªÊ¼ FMM ²ÎÊýÉèÖÃ           */
+		/*            å¼€å§‹ FMM å‚æ•°è®¾ç½®           */
 		int ns = ImageNumber;
 		int nt = Nw * 2 + NSource;
 		double* source = (double*)malloc(3 * ns * sizeof(double));
@@ -1665,7 +1665,7 @@ double HSMA::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Pot,
 			EF[i] = CenterPara * Fibonacci[i][3];
 		}
 
-		/*            ¿ªÊ¼ FMM ²ÎÊýÉèÖÃ           */
+		/*            å¼€å§‹ FMM å‚æ•°è®¾ç½®           */
 		ns = 2 * F + 2;
 		double* sourceF = (double*)malloc(3 * ns * sizeof(double));
 		double* chargeF = (double*)malloc(ns * sizeof(double));
