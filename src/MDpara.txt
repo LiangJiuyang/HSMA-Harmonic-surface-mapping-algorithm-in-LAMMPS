@@ -1,0 +1,5 @@
+10000 10000 100 1.0 1.0 1.0 0.01 0.5                                     
+
+#&Equilibrim_Step, &MD_Step, &RecordInveral, &m, &KBT, &gama, &TStep, &DielectricConstant, &spring coefficient
+(Only affects dipole)
+

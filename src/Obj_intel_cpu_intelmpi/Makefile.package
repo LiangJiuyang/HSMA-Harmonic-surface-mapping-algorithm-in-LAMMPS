@@ -1,0 +1,15 @@
+# Settings for libraries used by specific LAMMPS packages
+# this file is auto-edited when those packages are included/excluded
+
+SOURCE = $(wildcard /lustre/home/acct-matxzl/matxzl/jiuyang/InvAug/src/OFile/* .o)
+
+PKG_INC =   -DLMP_USER_OMP -DLMP_USER_INTEL -DLMP_MPIIO # $(SOURCE) -fPIC -funroll-loops -lgfortran -lm -ldl
+
+PKG_PATH =  $(SOURCE) -lgfortran -lm -ldl #-fPIC -funroll-loops #xMIC-AVX512
+PKG_LIB =   
+PKG_CPP_DEPENDS = 
+PKG_LINK_DEPENDS = 
+
+PKG_SYSINC =  $(molfile_SYSINC) 
+PKG_SYSLIB =  $(molfile_SYSLIB) 
+PKG_SYSPATH = $(molfile_SYSPATH) 

@@ -1,0 +1,41 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/math_neon.dir/math_acosf.c.o"
+  "CMakeFiles/math_neon.dir/math_asinf.c.o"
+  "CMakeFiles/math_neon.dir/math_atan2f.c.o"
+  "CMakeFiles/math_neon.dir/math_atanf.c.o"
+  "CMakeFiles/math_neon.dir/math_ceilf.c.o"
+  "CMakeFiles/math_neon.dir/math_cosf.c.o"
+  "CMakeFiles/math_neon.dir/math_coshf.c.o"
+  "CMakeFiles/math_neon.dir/math_expf.c.o"
+  "CMakeFiles/math_neon.dir/math_fabsf.c.o"
+  "CMakeFiles/math_neon.dir/math_floorf.c.o"
+  "CMakeFiles/math_neon.dir/math_fmodf.c.o"
+  "CMakeFiles/math_neon.dir/math_frexpf.c.o"
+  "CMakeFiles/math_neon.dir/math_invsqrtf.c.o"
+  "CMakeFiles/math_neon.dir/math_ldexpf.c.o"
+  "CMakeFiles/math_neon.dir/math_log10f.c.o"
+  "CMakeFiles/math_neon.dir/math_logf.c.o"
+  "CMakeFiles/math_neon.dir/math_mat2.c.o"
+  "CMakeFiles/math_neon.dir/math_mat3.c.o"
+  "CMakeFiles/math_neon.dir/math_mat4.c.o"
+  "CMakeFiles/math_neon.dir/math_modf.c.o"
+  "CMakeFiles/math_neon.dir/math_powf.c.o"
+  "CMakeFiles/math_neon.dir/math_runfast.c.o"
+  "CMakeFiles/math_neon.dir/math_sincosf.c.o"
+  "CMakeFiles/math_neon.dir/math_sinf.c.o"
+  "CMakeFiles/math_neon.dir/math_sinfv.c.o"
+  "CMakeFiles/math_neon.dir/math_sinhf.c.o"
+  "CMakeFiles/math_neon.dir/math_sqrtf.c.o"
+  "CMakeFiles/math_neon.dir/math_sqrtfv.c.o"
+  "CMakeFiles/math_neon.dir/math_tanf.c.o"
+  "CMakeFiles/math_neon.dir/math_tanhf.c.o"
+  "CMakeFiles/math_neon.dir/math_vec2.c.o"
+  "CMakeFiles/math_neon.dir/math_vec3.c.o"
+  "libmath_neon.pdb"
+  "libmath_neon.so"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang C)
+  include(CMakeFiles/math_neon.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()
