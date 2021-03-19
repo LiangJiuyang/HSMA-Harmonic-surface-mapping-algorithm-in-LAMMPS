@@ -12,7 +12,9 @@ kspace_style HSMA2D 1.0e-3 1.5 0.0 6 40 16 55.0 89.0 1 1
 
 Note that the 'pair style' should be set as 'lj/cut' (or lj/cut/omp, we recommend using user-omp package in Lammps) if you want to evaluate LJ potential. Please do not use pair styles which are combined with the near part of a Coulomb solver, such as'lj/cut/coul/long', etc. 
 
-This version still need optimization. If you have any questions, please send a email to liangjiuyang@sjtu.edu.cn.
+This version still need optimization. If you have any questions, please send a email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
+
+Good luck to all of you!
 
 ## `Introduction of HSMA3D and HSMA2D (with planar dielectric interfaces)`  
 Harmonic Surface Mapping Algorithm for 3D periodic systems, first described in paper [Harmonic surface mapping algorithm for fast electrostatic sums](https://aip.scitation.org/doi/10.1063/1.5044438) published by The Journal of Chemical Physics, is an efficient implementation for electrostatic pairwise sums of an infinite number of images accelerated by Fast Multiple method(FMM) and graphics processing units(GPU) (cuda codes are available in another repository). Numerical calculations of the Madelung constant, electrostatic energy of ions in a metallic cavity, and the time performance for large-scale systems show that the HSMA is accurate and fast, and thus is attractive for many applications.
