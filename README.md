@@ -12,6 +12,8 @@ kspace_style HSMA2D 1.0e-3 1.5 0.0 6 40 16 55.0 89.0 1 1
 
 Note that the 'pair style' should be set as 'lj/cut' (or lj/cut/omp, we recommend using user-omp package in Lammps) if you want to evaluate LJ potential. Please do not use pair styles which are combined with the near part of a Coulomb solver, such as'lj/cut/coul/long', etc. 
 
+In this package, we utilize an efficienct implementation of FMM (FMM3D) which is developed by Greengard's group.
+
 This version still need optimization. If you have any questions, please send a email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
 
 Good luck to all of you!
