@@ -5,10 +5,49 @@ For employing HSMA3D, the only thing needed is to change the k-space solver in y
 ```
 kspace_style HSMA 1.0e-3 1.3 8 128 55.0 89.0 1 0
 ```
+The first two parameters don't need to modify. Just keep them as `"kspace_style HSMA".`
+
+1.0e-3 : the tolerance of FMM or directly compute.  
+
+1.3 : If the dimensions of simulation box are Lx=Ly=Lz=100, then this parameter means that one find all the images within a sphere with radius 1.3 * sqrt(LxLx+LyLy+LzLz)
+.   
+
+8 : means that the number of basis is 8*8=64.  
+
+128 : the number of monitoring points.  
+
+55.0 and 89.0 : the parameters of Fibonacci quadrature. One can set these two numbers as two adjacent Fibonacci numbers, like "89.0 144.0" or "144.0 233.0".
+
+1 : Indicate if one employs FMM (O(N)) to evaluate the potential of near-field. "0" indicates directly computing which has O(N^2) complexity.
+
+0 : Indicate if one employs FMM (O(N)) to evaluate the potential of far-field. "0" indicates directly computing which has O(N^2) complexity.
+
 For employing HSMA2D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
 ```
 kspace_style HSMA2D 1.0e-3 1.5 0.0 6 40 16 55.0 89.0 1 1
 ```  
+The first two parameters don't need to modify. Just keep them as `"kspace_style HSMA2D".`  
+
+1.0e-3 : the tolerance of FMM or directly compute.  
+
+1.5 : If the dimensions of simulation box are Lx=Ly=Lz=100, then this parameter means that one find all the images within a sphere with radius 1.3 * sqrt(Lx*Lx+Ly*Ly+Lz*Lz)
+.  
+
+0.00 : the dielectric mismatch. The range of mismatch is [-1,1]
+  
+6 : means that the number of basis is 6*6=36. 
+
+40 : the number of Gaussian quadratures.  
+
+16 : the parameter "w" in our paper (relative to the 2D dilation quadrature).
+
+55.0 and 89.0 : the parameters of Fibonacci quadrature. One can set these two numbers as two adjacent Fibonacci numbers, like "89.0 144.0" or "144.0 233.0".
+
+1 : Indicate if one employs FMM (O(N)) to evaluate the potential of near-field. "0" indicates directly computing which has O(N^2) complexity.
+
+0 : Indicate if one employs FMM (O(N)) to evaluate the potential of far-field. "0" indicates directly computing which has O(N^2) complexity.
+
+For more details of parameter setting, please refer to our SCI papers which contain the set of parameter within given accuracy. 
 
 Note that the 'pair style' should be set as 'lj/cut' (or lj/cut/omp, we recommend using user-omp package in Lammps) if you want to evaluate LJ potential. Please do not use pair styles which are combined with the near part of a Coulomb solver, such as'lj/cut/coul/long', etc. 
 
