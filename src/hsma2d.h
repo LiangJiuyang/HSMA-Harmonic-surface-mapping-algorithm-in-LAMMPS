@@ -58,7 +58,7 @@ namespace LAMMPS_NS {
 		void AdjustParticle_Double(double Particle[][3], int N, double Lx, double Ly, double Lz);
 		double SetImageCharge(double ImageCharge[][5], int* ImageNumber, int TotalNumber, double Source[][3], double* Q, int NSource, double Rs, double Lx, double Ly, double Lz, int lx, int ly, int lz);
 		void CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down, double** DownZD, double ImageCharge[][5], int ImageNumber, double*** IntegralTop, double*** IntegralDown, int Nw, double Gamma, int IF_FMM_RightTerm, int S, double* AR, double Lx, double Ly, double Lz, double tolerance);
-		void ConstructRightTerm(double* RightTermReal, double* RightTermImag, double** TopNear, double** TopZDNear, double** DownNear, double** DownZDNear, double*** IntegralTop, double*** IntegralDown, int Nw, int NJKBound, double EU, double mu, double Lx, double Ly, double Lz, int S);
+		void ConstructRightTerm(double* RightTermReal, double* RightTermImag, double** TopNear, double** TopZDNear, double** DownNear, double** DownZDNear, double*** IntegralTop, double*** IntegralDown, int Nw, int NJKBound, double EU, double mu, double Lx, double Ly, double Lz, int S, double tolerance);
 		void SolveLeastSquareProblem(double* C, double** LeftTermReal, double** LeftTermImag, double* RightTermReal, double* RightTermImag, int p, int row);
 		double FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][5], int ImageNumber, double** Fibonacci, double** QRD, double** QLocalRD, double Gamma, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance);
 		double fac(double t);

@@ -25,6 +25,7 @@
 #include"mkl.h"
 #include<omp.h>
 #include<iomanip>
+#include <immintrin.h> 
 
 #include "complex.h"
 
@@ -239,20 +240,45 @@ void HSMA2D::compute(int eflag, int vflag)
 		int ImageNumber;
 		SetImageCharge(ImageCharge, &ImageNumber, (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1), X, Q, nlocal, Rs, Lx, Ly, Lz, lx, ly, lz);
 
+		MPI_Barrier(MPI_COMM_WORLD);
+		time = MPI_Wtime() - time;  // 终止计时
+		//if (me == 0)cout << "The total time of Kspace 0 is " << time * 1000 << "   ms" << endl;
+		time = MPI_Wtime();
+
 		/*Calculate Near Field and ZD*/
 		CalculateNearFieldAndZD((double**)TopNear, (double**)TopZDNear, (double**)DownNear, (double**)DownZDNear, ImageCharge, ImageNumber, (double***)IntegralTop, (double***)IntegralDown, Nw, Gamma, IF_FMM_RightTerm, S, AR, Lx, Ly, Lz, tolerance);
 
+		MPI_Barrier(MPI_COMM_WORLD);
+		time = MPI_Wtime() - time;  // 终止计时
+		//if (me == 0)cout << "The total time of Kspace I is " << time * 1000 << "   ms" << endl;
+		time = MPI_Wtime();
+
 		/*Construct the right term by using the DTN condition*/
 		double RightTermReal[2 * NJK], RightTermImag[2 * NJK];
-		ConstructRightTerm(RightTermReal, RightTermImag, (double**)TopNear, (double**)TopZDNear, (double**)DownNear, (double**)DownZDNear, (double***)IntegralTop, (double***)IntegralDown, Nw, NJKBound, EU, mu, Lx, Ly, Lz, S);
+		ConstructRightTerm(RightTermReal, RightTermImag, (double**)TopNear, (double**)TopZDNear, (double**)DownNear, (double**)DownZDNear, (double***)IntegralTop, (double***)IntegralDown, Nw, NJKBound, EU, mu, Lx, Ly, Lz, S, tolerance);
+
+		MPI_Barrier(MPI_COMM_WORLD);
+		time = MPI_Wtime() - time;  // 终止计时
+		//if (me == 0)cout << "The total time of Kspace II is " << time * 1000 << "   ms" << endl;
+		time = MPI_Wtime();
 
 		//Solve The Least Square Problem
 		double C[p * p];
 		SolveLeastSquareProblem(C, (double**)LeftTermReal, (double**)LeftTermImag, RightTermReal, RightTermImag, p, 2 * NJK);
 
+		MPI_Barrier(MPI_COMM_WORLD);
+		time = MPI_Wtime() - time;  // 终止计时
+		//if (me == 0)cout << "The total time of Kspace III is " << time * 1000 << "   ms" << endl;
+		time = MPI_Wtime();
+
 		/*Calculate the potential, energyand force of the source charges*/
 		double Energy_HSMA;
 		Energy_HSMA = FinalCalculateEnergyAndForce(Force, Pot, X, Q, nlocal, ImageCharge, ImageNumber, Fibonacci, (double**)QRD, (double**)QLocalRD, Gamma, C, p, Fp, F, Rs, PI, IF_FMM_FinalPotential, tolerance);
+
+		MPI_Barrier(MPI_COMM_WORLD);
+		time = MPI_Wtime() - time;  // 终止计时
+		//if (me == 0)cout << "The total time of Kspace IV is " << time * 1000 << "   ms" << endl;
+		time = MPI_Wtime();
 
 		scale = 1.0;
 		const double qscale = qqrd2e * scale;
@@ -327,7 +353,7 @@ void HSMA2D::compute(int eflag, int vflag)
 		
 		/*Construct the right term by using the DTN condition*/
 		double RightTermReal[2 * NJK], RightTermImag[2 * NJK];
-		ConstructRightTerm(RightTermReal, RightTermImag, (double**)TopNear, (double**)TopZDNear, (double**)DownNear, (double**)DownZDNear, (double***)IntegralTop, (double***)IntegralDown, Nw, NJKBound, EU, mu, Lx, Ly, Lz, S);
+		ConstructRightTerm(RightTermReal, RightTermImag, (double**)TopNear, (double**)TopZDNear, (double**)DownNear, (double**)DownZDNear, (double***)IntegralTop, (double***)IntegralDown, Nw, NJKBound, EU, mu, Lx, Ly, Lz, S, tolerance);
 		double RightTermReal_All[2 * NJK], RightTermImag_All[2 * NJK];
 		MPI_Reduce(RightTermReal, RightTermReal_All, 2 * NJK, MPI_DOUBLE, MPI_SUM, 0, world);
 		MPI_Reduce(RightTermImag, RightTermImag_All, 2 * NJK, MPI_DOUBLE, MPI_SUM, 0, world);
@@ -380,7 +406,7 @@ void HSMA2D::compute(int eflag, int vflag)
 		}
 	}
 
-	if (me == 0) cout << f[0][0] << "     " << f[0][1] << "      " << f[0][2] << endl;
+	//if (me == 0) cout << f[0][0] << "     " << f[0][1] << "      " << f[0][2] << endl;
 }
 
 double HSMA2D::memory_usage()
@@ -1241,10 +1267,146 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 				DownZD[i][j] = gradtarg[3 * ((S * Nw) * (S * Nw) + i * (S * Nw) + j) + 2];
 			}
 
+		//cout << "Top is " << Top[0][0] << "    " << Top[0][1] << "    " << Top[0][2] << endl;
+		 
 		free(source); free(target); free(charge); free(pottarg); free(gradtarg);
 	}
 	else
 	{
+		
+		double Paramet1[ImageNumber];
+		for (int i = 0; i < ImageNumber; i++)
+		{
+			Paramet1[i] = ImageCharge[i][3] * pow(Gamma, fabs(ImageCharge[i][4]) + 0.00);
+		}
+		
+        #pragma omp parallel
+		{
+			int id = omp_get_thread_num();
+			int size = omp_get_num_threads();
+			int min_atom=id*floor(S*Nw*S*Nw/size)+1, max_atom=(id+1)*floor(S*Nw*S*Nw/size);
+			if (id == size - 1)max_atom = S * Nw * S * Nw - 1;
+			if (id == 0)min_atom = 0;
+
+			int float_double;
+			if (tolerance > 0.000001) { 
+				float_double = 1; 
+				float IntegralTop_X[max_atom - min_atom + 1], IntegralTop_Y[max_atom - min_atom + 1], IntegralTop_Z[max_atom - min_atom + 1];
+				for (int i = min_atom; i <= max_atom; i++)
+				{
+					int ix = floor(i / (S * Nw));
+					int iy = i - ix * (S * Nw);
+					IntegralTop_X[i - min_atom] = IntegralTop[ix][iy][0];
+					IntegralTop_Y[i - min_atom] = IntegralTop[ix][iy][1];
+					IntegralTop_Z[i - min_atom] = IntegralTop[ix][iy][2];
+				}
+				for (int i = min_atom; i <= max_atom; i = i + 16)
+				{
+					__m512 pottarg, fldtarg, pottarg2, fldtarg2, X0, Y0, X1, Y1, dx, dy, dz, dz1, delta, delta1, Para, midterm, midterm1;
+					float F1[16], F2[16], F3[16], F4[16];
+					pottarg = fldtarg = pottarg2 = fldtarg2 = _mm512_setzero_ps();
+					X0 = _mm512_load_ps(&IntegralTop_X[i - min_atom]);
+					Y0 = _mm512_load_ps(&IntegralTop_Y[i - min_atom]);
+					//Z0 = _mm512_load_pd(&IntegralTop_Z[i]);
+
+					for (int j = 0; j < ImageNumber; j++)
+					{
+						Para = _mm512_set1_ps(Paramet1[j]);
+						X1 = _mm512_set1_ps(ImageCharge[j][0]);
+						Y1 = _mm512_set1_ps(ImageCharge[j][1]);
+						dz = _mm512_set1_ps(Lz / 2.0 - ImageCharge[j][2]);
+						dx = X0 - X1;
+						dy = Y0 - Y1;
+						delta = _mm512_invsqrt_ps(dx * dx + dy * dy + dz * dz);
+						midterm = Para * delta;
+						fldtarg -= dz * midterm * delta * delta;
+						pottarg += midterm;
+						dz1 = _mm512_set1_ps(-Lz / 2.0 - ImageCharge[j][2]);
+						delta1= _mm512_invsqrt_ps(dx * dx + dy * dy + dz1 * dz1);
+						midterm1 = Para * delta1;
+						pottarg2 += midterm1;
+						fldtarg2 -= dz1 * midterm1 * delta1 * delta1;
+					}
+
+					_mm512_store_ps(&F1[0], pottarg);
+					_mm512_store_ps(&F2[0], pottarg2);
+					_mm512_store_ps(&F4[0], fldtarg2);
+					_mm512_store_ps(&F3[0], fldtarg);
+
+					for (int j = i; (j < i + 16) && (j <= max_atom); j++)
+					{
+						int ix = floor(j / (S * Nw));
+						int iy = j - ix * (S * Nw);
+
+						Top[ix][iy] = F1[j - i];
+						TopZD[ix][iy] = F3[j - i];
+						Down[ix][iy] = F2[j - i];
+						DownZD[ix][iy] = F4[j - i];
+					}
+				}
+			}
+			else { 
+				float_double = 2; 
+				double IntegralTop_X[max_atom - min_atom + 1], IntegralTop_Y[max_atom - min_atom + 1], IntegralTop_Z[max_atom - min_atom + 1];
+				for (int i = min_atom; i <= max_atom; i++)
+				{
+					int ix = floor(i / (S * Nw));
+					int iy = i - ix * (S * Nw);
+					IntegralTop_X[i - min_atom] = IntegralTop[ix][iy][0];
+					IntegralTop_Y[i - min_atom] = IntegralTop[ix][iy][1];
+					IntegralTop_Z[i - min_atom] = IntegralTop[ix][iy][2];
+				}
+				for (int i = min_atom; i <= max_atom; i = i + 8)
+				{
+					__m512d pottarg, fldtarg, pottarg2, fldtarg2, X0, Y0, X1, Y1, dx, dy, dz, dz1, delta, delta1, Para, midterm, midterm1;
+					double F1[8], F2[8], F3[8], F4[8];
+					pottarg = fldtarg = pottarg2 = fldtarg2 = _mm512_setzero_pd();
+					X0 = _mm512_load_pd(&IntegralTop_X[i - min_atom]);
+					Y0 = _mm512_load_pd(&IntegralTop_Y[i - min_atom]);
+					//Z0 = _mm512_load_pd(&IntegralTop_Z[i]);
+
+					for (int j = 0; j < ImageNumber; j++)
+					{
+						Para = _mm512_set1_pd(Paramet1[j]);
+						X1 = _mm512_set1_pd(ImageCharge[j][0]);
+						Y1 = _mm512_set1_pd(ImageCharge[j][1]);
+						dz = _mm512_set1_pd(Lz / 2.0 - ImageCharge[j][2]);
+						dx = X0 - X1;
+						dy = Y0 - Y1;
+						delta = _mm512_invsqrt_pd(dx * dx + dy * dy + dz * dz);
+						midterm = Para * delta;
+						pottarg += midterm;
+						fldtarg -= dz * midterm * delta * delta;
+						dz1 = _mm512_set1_pd(-Lz / 2.0 - ImageCharge[j][2]);
+						delta1 = _mm512_invsqrt_pd(dx * dx + dy * dy + dz1 * dz1);
+						midterm1 = Para * delta1;
+						pottarg2 += midterm1;
+						fldtarg2 -= dz1 * midterm1 * delta1 * delta1;
+					}
+
+					_mm512_store_pd(&F1[0], pottarg);
+					_mm512_store_pd(&F2[0], pottarg2);
+					_mm512_store_pd(&F4[0], fldtarg2);
+					_mm512_store_pd(&F3[0], fldtarg);
+
+					for (int j = i; (j < i + 8) && (j < max_atom); j++)
+					{
+						int ix = floor(j / (S * Nw));
+						int iy = j - ix * (S * Nw);
+
+						Top[ix][iy] = F1[j - i];
+						TopZD[ix][iy] = F3[j - i];
+						Down[ix][iy] = F2[j - i];
+						DownZD[ix][iy] = F4[j - i];
+					}
+				}
+			}
+			//cout << "Top is " << Top[0][0] << "    " << Top[0][1] << "    " << Top[0][2] << endl;
+			//cout << "My id is " << id << "   , My size is " << size << "   My min is " << min_atom << "   My max is " << max_atom << endl;
+		}
+		
+
+		/*
 		double Paramet1[ImageNumber];
 		for (int i = 0; i < ImageNumber; i++)
 		{
@@ -1301,10 +1463,12 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 				DownZD[ix][iy] = fldtarg2;
 			}
 		}
+		cout << "Top is " << Top[0][0] << "    " << Top[0][1] << "    " << Top[0][2] << endl;
+		*/
 	}
 }
 
-void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, double** TopNear, double** TopZDNear, double** DownNear, double** DownZDNear, double*** IntegralTop, double*** IntegralDown, int Nw, int NJKBound, double EU, double mu, double Lx, double Ly, double Lz, int S)
+void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, double** TopNear, double** TopZDNear, double** DownNear, double** DownZDNear, double*** IntegralTop, double*** IntegralDown, int Nw, int NJKBound, double EU, double mu, double Lx, double Ly, double Lz, int S, double tolerance)
 {
 
 	for (int i = 0; i < 2 * (2 * NJKBound + 1) * (2 * NJKBound + 1); i++)
@@ -1313,6 +1477,189 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 		RightTermImag[i] = 0.00;
 	}
 
+	
+     #pragma omp parallel
+	{
+		int id = omp_get_thread_num();
+		int size = omp_get_num_threads();
+		int min_index = id * floor((2 * NJKBound + 1) * (2 * NJKBound + 1) / (size+0.00)) + 1, max_index = (id + 1) * floor((2 * NJKBound + 1) * (2 * NJKBound + 1) / (size+0.00));
+		if (id == size - 1)max_index = (2 * NJKBound + 1) * (2 * NJKBound + 1) - 1;
+		if (id == 0)min_index = 0;
+
+		//cout << "My id is " << id << "   Size is " << size << "   My min is " << min_index << "    My max is " << max_index << endl;
+
+		if (tolerance > 0.000001)
+		{
+			float IntegralTop_X[S * Nw * S * Nw], IntegralTop_Y[S * Nw * S * Nw], IntegralTop_W[int(ceil(S * Nw * S * Nw / 16.0)) * 16];
+			float IntegralDown_X[S * Nw * S * Nw], IntegralDown_Y[S * Nw * S * Nw], IntegralDown_W[S * Nw * S * Nw];
+			float TopNear_F[S * Nw * S * Nw], TopZDNear_F[S * Nw * S * Nw], DownNear_F[S * Nw * S * Nw], DownZDNear_F[S * Nw * S * Nw];
+			for (int i = 0; i < S * Nw * S * Nw; i++)
+			{
+				int ix = floor(i / (S * Nw));
+				int iy = i - ix * (S * Nw);
+				IntegralTop_X[i] = IntegralTop[ix][iy][0];
+				IntegralTop_Y[i] = IntegralTop[ix][iy][1];
+				IntegralTop_W[i] = IntegralTop[ix][iy][3];
+				IntegralDown_X[i] = IntegralDown[ix][iy][0];
+				IntegralDown_Y[i] = IntegralDown[ix][iy][1];
+				IntegralDown_W[i] = IntegralDown[ix][iy][3];
+				TopNear_F[i] = TopNear[ix][iy];
+				TopZDNear_F[i] = TopZDNear[ix][iy];
+				DownNear_F[i] = DownNear[ix][iy];
+				DownZDNear_F[i] = DownZDNear[ix][iy];
+			}
+
+			for (int i = S * Nw * S * Nw; i < int(ceil(S * Nw * S * Nw / 16.0)) * 16; i++)
+			{
+				IntegralTop_W[i] = 0.00;
+				IntegralDown_W[i] = 0.00;
+			}
+
+			float inveu = (1.0 / EU);
+
+			for (int i = min_index; i <= max_index; i++)
+			{
+				int j = floor(i / ((2 * NJKBound + 1)));
+				int k = i - j * ((2 * NJKBound + 1));
+				j = j - NJKBound;
+				k = k - NJKBound;
+
+				__m512 X0, Y0, W0, topnear, topzdnear, downnear, downzdnear, I1, E1, E2, I2, Sin1, Sin2, Cos1, Cos2, EQ1, EQ2, EQ3, EQ4;
+				__m512 MU, J, K, INVEU;
+
+				MU = _mm512_set1_ps(mu);
+				J = _mm512_set1_ps(j);
+				K = _mm512_set1_ps(k);
+				INVEU = _mm512_set1_ps(inveu);
+
+				float res1 = 0.00, res2 = 0.00, res3 = 0.00, res4 = 0.00;
+
+				for (int m = 0; m < S * Nw * S * Nw; m += 16)
+				{
+					X0 = _mm512_load_ps(&IntegralTop_X[m]);
+					Y0 = _mm512_load_ps(&IntegralTop_Y[m]);
+					W0 = _mm512_load_ps(&IntegralTop_W[m]);
+					topnear = _mm512_load_ps(&TopNear_F[m]);
+					topzdnear = _mm512_load_ps(&TopZDNear_F[m]);
+					downnear = _mm512_load_ps(&DownNear_F[m]);
+					downzdnear = _mm512_load_ps(&DownZDNear_F[m]);
+
+					I1 = -MU * (J * X0 + K * Y0);
+					E1 = INVEU * topzdnear + MU * _mm512_sqrt_ps(J * J + K * K) * topnear;
+					Sin1 = _mm512_sincos_ps(&Cos1, I1);
+					EQ1 = E1 * Cos1;
+					EQ2 = E1 * Sin1;
+					res1 += _mm512_reduce_add_ps(EQ1 * W0);
+					res2 += _mm512_reduce_add_ps(EQ2 * W0);
+
+					E2 = INVEU * downzdnear - MU * _mm512_sqrt_ps(J * J + K * K) * downnear;
+					I2 = -MU * (J * X0 + K * Y0);//此处默认上下测试点横坐标一样
+					Sin2 = _mm512_sincos_ps(&Cos2, I2);
+					EQ3 = E2 * Cos2;
+					EQ4 = E2 * Sin2;
+					res3 += _mm512_reduce_add_ps(EQ3 * W0);
+					res4 += _mm512_reduce_add_ps(EQ4 * W0);
+				}
+				RightTermReal[i] += res1;
+				RightTermImag[i] += res2;
+				RightTermReal[(2 * NJKBound + 1) * (2 * NJKBound + 1) + i] += res3;
+				RightTermImag[(2 * NJKBound + 1) * (2 * NJKBound + 1) + i] += res4;
+			}
+		}
+		else if(tolerance < 0.000001)
+		{
+			double IntegralTop_X[S * Nw * S * Nw], IntegralTop_Y[S * Nw * S * Nw], IntegralTop_W[int(ceil(S * Nw * S * Nw / 8.0)) * 8];
+			double IntegralDown_X[S * Nw * S * Nw], IntegralDown_Y[S * Nw * S * Nw], IntegralDown_W[S * Nw * S * Nw];
+			double TopNear_F[S * Nw * S * Nw], TopZDNear_F[S * Nw * S * Nw], DownNear_F[S * Nw * S * Nw], DownZDNear_F[S * Nw * S * Nw];
+			for (int i = 0; i < S * Nw * S * Nw; i++)
+			{
+				int ix = floor(i / (S * Nw));
+				int iy = i - ix * (S * Nw);
+				IntegralTop_X[i] = IntegralTop[ix][iy][0];
+				IntegralTop_Y[i] = IntegralTop[ix][iy][1];
+				IntegralTop_W[i] = IntegralTop[ix][iy][3];
+				IntegralDown_X[i] = IntegralDown[ix][iy][0];
+				IntegralDown_Y[i] = IntegralDown[ix][iy][1];
+				IntegralDown_W[i] = IntegralDown[ix][iy][3];
+				TopNear_F[i] = TopNear[ix][iy];
+				TopZDNear_F[i] = TopZDNear[ix][iy];
+				DownNear_F[i] = DownNear[ix][iy];
+				DownZDNear_F[i] = DownZDNear[ix][iy];
+			}
+
+			for (int i = S * Nw * S * Nw; i < int(ceil(S * Nw * S * Nw / 8.0)) * 8; i++)
+			{
+				IntegralTop_W[i] = 0.00;
+				IntegralDown_W[i] = 0.00;
+			}
+
+			double inveu = (1.0 / EU);
+
+			for (int i = min_index; i <= max_index; i++)
+			{
+				int j = floor(i / ((2 * NJKBound + 1)));
+				int k = i - j * ((2 * NJKBound + 1));
+				j = j - NJKBound;
+				k = k - NJKBound;
+
+				__m512d X0, Y0, W0, topnear, topzdnear, downnear, downzdnear, I1, E1, E2, I2, Sin1, Sin2, Cos1, Cos2, EQ1, EQ2, EQ3, EQ4;
+				__m512d MU, J, K, INVEU;
+
+				MU = _mm512_set1_pd(mu);
+				J = _mm512_set1_pd(j);
+				K = _mm512_set1_pd(k);
+				INVEU = _mm512_set1_pd(inveu);
+
+				double res1 = 0.00, res2 = 0.00, res3 = 0.00, res4 = 0.00;
+
+				for (int m = 0; m < S * Nw * S * Nw; m += 8)
+				{
+					X0 = _mm512_load_pd(&IntegralTop_X[m]);
+					Y0 = _mm512_load_pd(&IntegralTop_Y[m]);
+					W0 = _mm512_load_pd(&IntegralTop_W[m]);
+					topnear = _mm512_load_pd(&TopNear_F[m]);
+					topzdnear = _mm512_load_pd(&TopZDNear_F[m]);
+					downnear = _mm512_load_pd(&DownNear_F[m]);
+					downzdnear = _mm512_load_pd(&DownZDNear_F[m]);
+
+					I1 = -MU * (J * X0 + K * Y0);
+					E1 = INVEU * topzdnear + MU * _mm512_sqrt_pd(J * J + K * K) * topnear;
+					Sin1 = _mm512_sincos_pd(&Cos1, I1);
+					EQ1 = E1 * Cos1;
+					EQ2 = E1 * Sin1;
+					res1 += _mm512_reduce_add_pd(EQ1 * W0);
+					res2 += _mm512_reduce_add_pd(EQ2 * W0);
+
+					E2 = INVEU * downzdnear - MU * _mm512_sqrt_pd(J * J + K * K) * downnear;
+					I2 = -MU * (J * X0 + K * Y0);//此处默认上下测试点横坐标一样
+					Sin2 = _mm512_sincos_pd(&Cos2, I2);
+					EQ3 = E2 * Cos2;
+					EQ4 = E2 * Sin2;
+					res3 += _mm512_reduce_add_pd(EQ3 * W0);
+					res4 += _mm512_reduce_add_pd(EQ4 * W0);
+				}
+				RightTermReal[i] += res1;
+				RightTermImag[i] += res2;
+				RightTermReal[(2 * NJKBound + 1) * (2 * NJKBound + 1) + i] += res3;
+				RightTermImag[(2 * NJKBound + 1) * (2 * NJKBound + 1) + i] += res4;
+			}
+		}
+	}
+	/*
+	cout << 2 * (2 * NJKBound + 1) * (2 * NJKBound + 1) << endl;
+	cout << "RightTermReal = " << RightTermReal[0] << "   " << RightTermImag[0] << endl;
+	cout << "RightTermReal = " << RightTermReal[80] << "   " << RightTermImag[80] << endl;
+	cout << "RightTermReal = " << RightTermReal[1] << "   " << RightTermImag[1] << endl;
+	cout << "RightTermReal = " << RightTermReal[2] << "   " << RightTermImag[2] << endl;
+	cout << "RightTermReal = " << RightTermReal[81] << "   " << RightTermImag[81] << endl;
+	cout << "RightTermReal = " << RightTermReal[161] << "   " << RightTermImag[161] << endl;
+	cout << "RightTermReal = " << RightTermReal[41] << "   " << RightTermImag[41] << endl;
+	cout << "RightTermReal = " << RightTermReal[42] << "   " << RightTermImag[42] << endl;
+	cout << "RightTermReal = " << RightTermReal[160] << "   " << RightTermImag[160] << endl;
+	cout << "RightTermReal = " << RightTermReal[159] << "   " << RightTermImag[159] << endl;
+	*/
+	
+	/*
     #pragma omp parallel
 	{
 		double E1, E2, E3, E4, I1, I2, I3, I4;
@@ -1328,22 +1675,33 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 					for (int n = 0; n < S * Nw; n++)
 					{
 						E1 = ((1.0 / EU) * TopZDNear[m][n] + mu * sqrt(j * j + k * k) * TopNear[m][n]);
+
 						I1 = -mu * (j * IntegralTop[m][n][0] + k * IntegralTop[m][n][1]);
+						
 						EQ1 = E1 * cos(I1);
+						
 						RightTermReal[index_r] = RightTermReal[index_r] + (EQ1) * IntegralTop[m][n][3];
+
 						EQ1 = E1 * sin(I1);
+
 						RightTermImag[index_r] = RightTermImag[index_r] + EQ1 * IntegralTop[m][n][3];
 
 						E1 = ((1.0 / EU) * DownZDNear[m][n] - mu * sqrt(j * j + k * k) * DownNear[m][n]);
+
 						I1 = -mu * (j * IntegralDown[m][n][0] + k * IntegralDown[m][n][1]);
+						
 						EQ1 = E1 * cos(I1);
 
 						RightTermReal[(2 * NJKBound + 1) * (2 * NJKBound + 1) + index_r] += (EQ1) * IntegralDown[m][n][3];
+
 						EQ1 = E1 * sin(I1);
+
 						RightTermImag[(2 * NJKBound + 1) * (2 * NJKBound + 1) + index_r] += (EQ1) * IntegralDown[m][n][3];
+
 					}
 			}
 	}
+	*/
 }
 
 void HSMA2D::SolveLeastSquareProblem(double* C, double** LeftTermReal, double** LeftTermImag, double* RightTermReal, double* RightTermImag, int p, int row)
@@ -1450,6 +1808,245 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 	if (!IF_FMM_FinalPotential)
 	{
 
+		if (tolerance > 0.000001)
+		{
+			float EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
+			float EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
+			float Q_Image[int(ceil(ImageNumber / 16.0)) * 16];
+			for (int j = 0; j < ImageNumber; j++)
+			{
+				Q_Image[j] = ImageCharge[j][3] * pow(Gamma, abs(ImageCharge[j][4]));
+			}
+			for (int j = ImageNumber; j<int(ceil(ImageNumber / 16.0)) * 16; j++)
+			{
+				Q_Image[j] = 0.00;
+			}
+
+			double C_New[int(ceil(p * p / 8.0)) * 8];
+			for (int i = 0; i<int(ceil(p * p / 8.0)) * 8; i++)
+			{
+				if (i < p * p)
+				{
+					C_New[i] = C[i];
+				}
+				else
+				{
+					C_New[i] = 0.00;
+				}
+			}
+
+			float Image_X[int(ceil(ImageNumber / 16.0)) * 16], Image_Y[int(ceil(ImageNumber / 16.0)) * 16], Image_Z[int(ceil(ImageNumber / 16.0)) * 16];
+			for (int i = 0; i < int(ceil(ImageNumber / 16.0)) * 16; i++)
+			{
+				if (i < ImageNumber) {
+					Image_X[i] = ImageCharge[i][0];
+					Image_Y[i] = ImageCharge[i][1];
+					Image_Z[i] = ImageCharge[i][2];
+				}
+				else {
+					Image_X[i] = 0.00;
+					Image_Y[i] = 0.00;
+					Image_Z[i] = 0.00;
+				}
+			}
+
+			#pragma omp parallel
+			{
+				int id = omp_get_thread_num();
+				int size = omp_get_num_threads();
+
+				int min_atom = id * floor(NSource / size) + 1, max_atom = (id + 1) * floor(NSource / size);
+				if (id == size - 1)max_atom = NSource - 1;
+				if (id == 0)min_atom = 0;
+
+				for (int i = min_atom; i <= max_atom; i++)
+				{
+					double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+					CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
+					CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
+					CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
+					CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
+					EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
+					EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
+					__m512d qf, qfz, qfx, qfy, c;
+					for (int j = 0; j < p * p; j = j + 8)
+					{
+						qf = _mm512_load_pd(&QF[j]);
+						qfz = _mm512_load_pd(&QFZ[j]);
+						qfx = _mm512_load_pd(&QFX[j]);
+						qfy = _mm512_load_pd(&QFY[j]);
+						c = _mm512_load_pd(&C_New[j]);
+						EF[i] = EF[i] + _mm512_reduce_add_pd(qf * c);
+						EFX[i] = EFX[i] + _mm512_reduce_add_pd(qfx * c);
+						EFY[i] = EFY[i] + _mm512_reduce_add_pd(qfy * c);
+						EFZ[i] = EFZ[i] + _mm512_reduce_add_pd(qfz * c);
+					}
+					__m512 X0, Y0, Z0, X1, Y1, Z1, Q1, deltax, deltay, deltaz, delta, square, judge, Zero, midterm, delta_square;
+					__mmask16 k0;
+					X0 = _mm512_set1_ps(Source[i][0]);
+					Y0 = _mm512_set1_ps(Source[i][1]);
+					Z0 = _mm512_set1_ps(Source[i][2]);
+					judge = _mm512_set1_ps(0.000000000001);
+					Zero = _mm512_set1_ps(0.00);
+					for (int j = 0; j < ImageNumber; j = j + 16)
+					{
+						X1 = _mm512_load_ps(&Image_X[j]);
+						Y1 = _mm512_load_ps(&Image_Y[j]);
+						Z1 = _mm512_load_ps(&Image_Z[j]);
+						Q1 = _mm512_load_ps(&Q_Image[j]);
+						deltax = X1 - X0;
+						deltay = Y1 - Y0;
+						deltaz = Z1 - Z0;
+						square = deltax * deltax + deltay * deltay + deltaz * deltaz;
+						k0 = _mm512_cmp_ps_mask(square, judge, _MM_CMPINT_GT);
+						delta = _mm512_mask_invsqrt_ps(Zero, k0, square);
+						midterm = Q1 * delta;
+						delta_square = delta * delta;
+						EN[i] += _mm512_reduce_add_ps(midterm);
+						ENX[i] += _mm512_reduce_add_ps(midterm * delta_square * deltax);
+						ENY[i] += _mm512_reduce_add_ps(midterm * delta_square * deltay);
+						ENZ[i] += _mm512_reduce_add_ps(midterm * delta_square * deltaz);
+
+					}
+				}
+
+			}
+
+			double Energy = 0.00;
+			for (int i = 0; i < NSource; i++)
+			{
+				Pot[i] = EN[i] + EF[i];
+				Energy = Energy + Q[i] * Pot[i];
+				Force[i][0] = -(EFX[i] + ENX[i]) * Q[i];
+				Force[i][1] = -(EFY[i] + ENY[i]) * Q[i];
+				Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
+			}
+
+			//cout << EN[0] << "   " << EF[0] << endl;
+
+			return Energy;
+		}
+		else
+		{
+			double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
+			double EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
+			double Q_Image[int(ceil(ImageNumber / 8.0)) * 8];
+			
+			for (int j = 0; j < ImageNumber; j++)
+			{
+				Q_Image[j] = ImageCharge[j][3] * pow(Gamma, abs(ImageCharge[j][4]));
+			}
+			for (int j = ImageNumber; j<int(ceil(ImageNumber /8.0)) * 8; j++)
+			{
+				Q_Image[j] = 0.00;
+			}
+
+			double C_New[int(ceil(p * p / 8.0)) * 8];
+			for (int i = 0; i<int(ceil(p * p / 8.0)) * 8; i++)
+			{
+				if (i < p * p)
+				{
+					C_New[i] = C[i];
+				}
+				else
+				{
+					C_New[i] = 0.00;
+				}
+			}
+
+			double Image_X[int(ceil(ImageNumber / 8.0)) * 8], Image_Y[int(ceil(ImageNumber / 8.0)) * 8], Image_Z[int(ceil(ImageNumber / 8.0)) * 8];
+			for (int i = 0; i < int(ceil(ImageNumber / 8.0)) * 8; i++)
+			{	
+				if (i < ImageNumber) {
+					Image_X[i] = ImageCharge[i][0];
+					Image_Y[i] = ImageCharge[i][1];
+					Image_Z[i] = ImageCharge[i][2];
+				}
+				else {
+					Image_X[i] = 0.00;
+					Image_Y[i] = 0.00;
+					Image_Z[i] = 0.00;
+				}
+			}
+
+		#pragma omp parallel
+			{
+				int id = omp_get_thread_num();
+				int size = omp_get_num_threads();
+
+				int min_atom = id * floor(NSource / size) + 1, max_atom = (id + 1) * floor(NSource / size);
+				if (id == size - 1)max_atom = NSource - 1;
+				if (id == 0)min_atom = 0;
+
+				for (int i = min_atom; i <= max_atom; i++)
+				{
+					double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+					CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
+					CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
+					CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
+					CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
+					EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
+					EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
+					__m512d qf, qfz, qfx, qfy, c;
+					for (int j = 0; j < p * p; j = j + 8)
+					{
+						qf = _mm512_load_pd(&QF[j]);
+						qfz = _mm512_load_pd(&QFZ[j]);
+						qfx = _mm512_load_pd(&QFX[j]);
+						qfy = _mm512_load_pd(&QFY[j]);
+						c = _mm512_load_pd(&C_New[j]);
+						EF[i] = EF[i] + _mm512_reduce_add_pd(qf * c);
+						EFX[i] = EFX[i] + _mm512_reduce_add_pd(qfx * c);
+						EFY[i] = EFY[i] + _mm512_reduce_add_pd(qfy * c);
+						EFZ[i] = EFZ[i] + _mm512_reduce_add_pd(qfz * c);
+					}
+					__m512d X0, Y0, Z0, X1, Y1, Z1, Q1, deltax, deltay, deltaz, delta, square, judge, Zero, midterm, delta_square;
+					__mmask16 k0;
+					X0 = _mm512_set1_pd(Source[i][0]);
+					Y0 = _mm512_set1_pd(Source[i][1]);
+					Z0 = _mm512_set1_pd(Source[i][2]);
+					judge = _mm512_set1_pd(0.000000000001);
+					Zero = _mm512_set1_pd(0.00);
+					for (int j = 0; j < ImageNumber; j = j + 8)
+					{
+						X1 = _mm512_load_pd(&Image_X[j]);
+						Y1 = _mm512_load_pd(&Image_Y[j]);
+						Z1 = _mm512_load_pd(&Image_Z[j]);
+						Q1 = _mm512_load_pd(&Q_Image[j]);
+						deltax = X1 - X0;
+						deltay = Y1 - Y0;
+						deltaz = Z1 - Z0;
+						square = deltax * deltax + deltay * deltay + deltaz * deltaz;
+						k0 = _mm512_cmp_pd_mask(square, judge, _MM_CMPINT_GT);
+						delta = _mm512_mask_invsqrt_pd(Zero, k0, square);
+						midterm = Q1 * delta;
+						delta_square = delta * delta;
+						EN[i] += _mm512_reduce_add_pd(midterm);
+						ENX[i] += _mm512_reduce_add_pd(midterm * delta_square * deltax);
+						ENY[i] += _mm512_reduce_add_pd(midterm * delta_square * deltay);
+						ENZ[i] += _mm512_reduce_add_pd(midterm * delta_square * deltaz);
+					}
+				}
+			}
+
+			double Energy = 0.00;
+			for (int i = 0; i < NSource; i++)
+			{
+				Pot[i] = EN[i] + EF[i];
+				Energy = Energy + Q[i] * Pot[i];
+				Force[i][0] = -(EFX[i] + ENX[i]) * Q[i];
+				Force[i][1] = -(EFY[i] + ENY[i]) * Q[i];
+				Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
+			}
+
+			//cout << EN[0] << "   " << EF[0] << endl;
+
+			return Energy;
+		}
+
+	
+
+		/*
 		double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
         #pragma omp parallel
 		{
@@ -1471,16 +2068,20 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 				}
 			}
 		}
+
+
 		double EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
 		for (int i = 0; i < NSource; i++)
 		{
 			EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
 		}
+
 		double Q_Image[ImageNumber];
 		for (int j = 0; j < ImageNumber; j++)
 		{
 			Q_Image[j] = ImageCharge[j][3] * pow(Gamma, abs(ImageCharge[j][4]));
 		}
+
 
         #pragma omp parallel
 		{
@@ -1526,6 +2127,8 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
 		}
 		return Energy;
+
+		*/
 	}
 	else
 	{
@@ -1604,6 +2207,8 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			Force[i][1] = -(gradtarg[3 * i + 1] + gradtargF[3 * i + 1]) * Q[i];
 			Force[i][2] = -(gradtarg[3 * i + 2] + gradtargF[3 * i + 2]) * Q[i];
 		}
+
+		cout << pottarg[0] << "   " << pottargF[0] << endl;
 		return Energy;
 	}
 
