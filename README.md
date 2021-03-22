@@ -51,7 +51,13 @@ For more details of parameter setting, please refer to our SCI papers which cont
 
 Note that the 'pair style' should be set as 'lj/cut' (or lj/cut/omp, we recommend using user-omp package in Lammps) if you want to evaluate LJ potential. Please do not use pair styles which are combined with the near part of a Coulomb solver, such as'lj/cut/coul/long', etc. 
 
-In this package, we utilize an efficienct implementation of FMM (FMM3D) which is developed by Greengard's group.
+In this package, we utilize an efficient implementation of FMM (FMM3D) which is developed by Greengard's group. 
+
+If you use this package in your work and feel that this package is helpful to you, please cite one (or both) of the following papers in your citation：
+
+1. [Q. Zhao, J. Liang, and Z. Xu, J. Chem. Phys. 149, 084111 (2018).](https://aip.scitation.org/doi/10.1063/1.5044438)
+2. [J. Liang, J. Yuan, E. Luijten, and Z. Xu, J. Chem. Phys. 152, 134109 (2020).](https://aip.scitation.org/doi/10.1063/5.0003293)
+
 
 This version still need optimization. If you have any questions, please send a email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
 
