@@ -342,7 +342,7 @@ void HSMA2D::compute(int eflag, int vflag)
 		MPI_Iallgatherv((double*)X, nlocal * 3, MPI_DOUBLE, (double*)AllSource, nlocal_All, Size_All, MPI_DOUBLE, world, &request);
 		MPI_Iallgatherv((double*)Q, nlocal, MPI_DOUBLE, (double*)AllQ, nlocal_All_Q, Size_All_Q, MPI_DOUBLE, world, &request_Q);
         
-		int lx = ceil((Rs - Lx / 2) / Lx), ly = ceil((Rs - Ly / 2) / Ly), lz = ceil((Rs - Lz / 2) / Lz);
+		int lx = ceil((Rs - Lx / 2.0) / Lx), ly = ceil((Rs - Ly / 2.0) / Ly), lz = ceil((Rs - Lz / 2.0) / Lz);
 		int TotalNumber = nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1);
 		double ImageCharge[TotalNumber][5];
 		int ImageNumber;
@@ -1291,7 +1291,7 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 			int float_double;
 			if (tolerance > 0.000001) { 
 				float_double = 1; 
-				float IntegralTop_X[max_atom - min_atom + 1], IntegralTop_Y[max_atom - min_atom + 1], IntegralTop_Z[max_atom - min_atom + 1];
+				float IntegralTop_X[int(ceil( (max_atom - min_atom + 1)/16.0 ))*16], IntegralTop_Y[int(ceil((max_atom - min_atom + 1) / 16.0)) * 16], IntegralTop_Z[int(ceil((max_atom - min_atom + 1) / 16.0)) * 16];
 				for (int i = min_atom; i <= max_atom; i++)
 				{
 					int ix = floor(i / (S * Nw));
@@ -1300,6 +1300,14 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 					IntegralTop_Y[i - min_atom] = IntegralTop[ix][iy][1];
 					IntegralTop_Z[i - min_atom] = IntegralTop[ix][iy][2];
 				}
+
+				for (int i = max_atom - min_atom + 1; i<int(ceil((max_atom - min_atom + 1) / 16.0)) * 16;i++)
+				{
+					IntegralTop_X[i] = 0.00;
+					IntegralTop_Y[i] = 0.00;
+					IntegralTop_Z[i] = 0.00;
+				}
+
 				for (int i = min_atom; i <= max_atom; i = i + 16)
 				{
 					__m512 pottarg, fldtarg, pottarg2, fldtarg2, X0, Y0, X1, Y1, dx, dy, dz, dz1, delta, delta1, Para, midterm, midterm1;
@@ -1347,7 +1355,7 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 			}
 			else { 
 				float_double = 2; 
-				double IntegralTop_X[max_atom - min_atom + 1], IntegralTop_Y[max_atom - min_atom + 1], IntegralTop_Z[max_atom - min_atom + 1];
+				double IntegralTop_X[int(ceil((max_atom - min_atom + 1) / 8.0)) * 8], IntegralTop_Y[int(ceil((max_atom - min_atom + 1) / 8.0)) * 8], IntegralTop_Z[int(ceil((max_atom - min_atom + 1) / 8.0)) * 8];
 				for (int i = min_atom; i <= max_atom; i++)
 				{
 					int ix = floor(i / (S * Nw));
@@ -1356,6 +1364,14 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 					IntegralTop_Y[i - min_atom] = IntegralTop[ix][iy][1];
 					IntegralTop_Z[i - min_atom] = IntegralTop[ix][iy][2];
 				}
+
+				for (int i = max_atom - min_atom + 1; i<int(ceil((max_atom - min_atom + 1) / 8.0)) * 8; i++)
+				{
+					IntegralTop_X[i] = 0.00;
+					IntegralTop_Y[i] = 0.00;
+					IntegralTop_Z[i] = 0.00;
+				}
+
 				for (int i = min_atom; i <= max_atom; i = i + 8)
 				{
 					__m512d pottarg, fldtarg, pottarg2, fldtarg2, X0, Y0, X1, Y1, dx, dy, dz, dz1, delta, delta1, Para, midterm, midterm1;
@@ -1363,7 +1379,6 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 					pottarg = fldtarg = pottarg2 = fldtarg2 = _mm512_setzero_pd();
 					X0 = _mm512_load_pd(&IntegralTop_X[i - min_atom]);
 					Y0 = _mm512_load_pd(&IntegralTop_Y[i - min_atom]);
-					//Z0 = _mm512_load_pd(&IntegralTop_Z[i]);
 
 					for (int j = 0; j < ImageNumber; j++)
 					{
@@ -1477,7 +1492,6 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 		RightTermImag[i] = 0.00;
 	}
 
-	
      #pragma omp parallel
 	{
 		int id = omp_get_thread_num();
@@ -1486,13 +1500,11 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 		if (id == size - 1)max_index = (2 * NJKBound + 1) * (2 * NJKBound + 1) - 1;
 		if (id == 0)min_index = 0;
 
-		//cout << "My id is " << id << "   Size is " << size << "   My min is " << min_index << "    My max is " << max_index << endl;
-
 		if (tolerance > 0.000001)
 		{
-			float IntegralTop_X[S * Nw * S * Nw], IntegralTop_Y[S * Nw * S * Nw], IntegralTop_W[int(ceil(S * Nw * S * Nw / 16.0)) * 16];
-			float IntegralDown_X[S * Nw * S * Nw], IntegralDown_Y[S * Nw * S * Nw], IntegralDown_W[S * Nw * S * Nw];
-			float TopNear_F[S * Nw * S * Nw], TopZDNear_F[S * Nw * S * Nw], DownNear_F[S * Nw * S * Nw], DownZDNear_F[S * Nw * S * Nw];
+			float IntegralTop_X[int(ceil(S * Nw * S * Nw / 16.0)) * 16], IntegralTop_Y[int(ceil(S * Nw * S * Nw / 16.0)) * 16], IntegralTop_W[int(ceil(S * Nw * S * Nw / 16.0)) * 16];
+			float IntegralDown_X[int(ceil(S * Nw * S * Nw / 16.0)) * 16], IntegralDown_Y[int(ceil(S * Nw * S * Nw / 16.0)) * 16], IntegralDown_W[int(ceil(S * Nw * S * Nw / 16.0)) * 16];
+			float TopNear_F[int(ceil(S * Nw * S * Nw / 16.0)) * 16], TopZDNear_F[int(ceil(S * Nw * S * Nw / 16.0)) * 16], DownNear_F[int(ceil(S * Nw * S * Nw / 16.0)) * 16], DownZDNear_F[int(ceil(S * Nw * S * Nw / 16.0)) * 16];
 			for (int i = 0; i < S * Nw * S * Nw; i++)
 			{
 				int ix = floor(i / (S * Nw));
@@ -1511,6 +1523,14 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 
 			for (int i = S * Nw * S * Nw; i < int(ceil(S * Nw * S * Nw / 16.0)) * 16; i++)
 			{
+				IntegralTop_X[i] = 0.00;
+				IntegralTop_Y[i] = 0.00;
+				IntegralDown_X[i] = 0.00;
+				IntegralDown_Y[i] = 0.00;
+				TopNear_F[i] = 0.00;
+				TopZDNear_F[i] = 0.00;
+				DownNear_F[i] = 0.00;
+				DownZDNear_F[i] = 0.00;
 				IntegralTop_W[i] = 0.00;
 				IntegralDown_W[i] = 0.00;
 			}
@@ -1568,9 +1588,9 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 		}
 		else if(tolerance < 0.000001)
 		{
-			double IntegralTop_X[S * Nw * S * Nw], IntegralTop_Y[S * Nw * S * Nw], IntegralTop_W[int(ceil(S * Nw * S * Nw / 8.0)) * 8];
-			double IntegralDown_X[S * Nw * S * Nw], IntegralDown_Y[S * Nw * S * Nw], IntegralDown_W[S * Nw * S * Nw];
-			double TopNear_F[S * Nw * S * Nw], TopZDNear_F[S * Nw * S * Nw], DownNear_F[S * Nw * S * Nw], DownZDNear_F[S * Nw * S * Nw];
+			double IntegralTop_X[int(ceil(S * Nw * S * Nw / 8.0)) * 8], IntegralTop_Y[int(ceil(S * Nw * S * Nw / 8.0)) * 8], IntegralTop_W[int(ceil(S * Nw * S * Nw / 8.0)) * 8];
+			double IntegralDown_X[int(ceil(S * Nw * S * Nw / 8.0)) * 8], IntegralDown_Y[int(ceil(S * Nw * S * Nw / 8.0)) * 8], IntegralDown_W[int(ceil(S * Nw * S * Nw / 8.0)) * 8];
+			double TopNear_F[int(ceil(S * Nw * S * Nw / 8.0)) * 8], TopZDNear_F[int(ceil(S * Nw * S * Nw / 8.0)) * 8], DownNear_F[int(ceil(S * Nw * S * Nw / 8.0)) * 8], DownZDNear_F[int(ceil(S * Nw * S * Nw / 8.0)) * 8];
 			for (int i = 0; i < S * Nw * S * Nw; i++)
 			{
 				int ix = floor(i / (S * Nw));
@@ -1589,6 +1609,14 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 
 			for (int i = S * Nw * S * Nw; i < int(ceil(S * Nw * S * Nw / 8.0)) * 8; i++)
 			{
+				IntegralTop_X[i] = 0.00;
+				IntegralTop_Y[i] = 0.00;
+				IntegralDown_X[i] = 0.00;
+				IntegralDown_Y[i] = 0.00;
+				TopNear_F[i] = 0.00;
+				TopZDNear_F[i] = 0.00;
+				DownNear_F[i] = 0.00;
+				DownZDNear_F[i] = 0.00;
 				IntegralTop_W[i] = 0.00;
 				IntegralDown_W[i] = 0.00;
 			}
@@ -1861,13 +1889,20 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 
 				for (int i = min_atom; i <= max_atom; i++)
 				{
-					double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+					double QF[int(ceil(p * p/8.0))*8], QFX[int(ceil(p * p / 8.0)) * 8], QFY[int(ceil(p * p / 8.0)) * 8], QFZ[int(ceil(p * p / 8.0)) * 8];
 					CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
 					CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
 					CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
 					CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
 					EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
 					EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
+					for (int ii = p * p; ii<int(ceil(p * p / 8.0)) * 8; ii++)
+					{
+						QF[ii] = 0.00;
+						QFX[ii] = 0.00;
+						QFY[ii] = 0.00;
+						QFZ[ii] = 0.00;
+					}
 					__m512d qf, qfz, qfx, qfy, c;
 					for (int j = 0; j < p * p; j = j + 8)
 					{
@@ -1980,13 +2015,20 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 
 				for (int i = min_atom; i <= max_atom; i++)
 				{
-					double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+					double QF[int(ceil(p * p / 8.0)) * 8], QFX[int(ceil(p * p / 8.0)) * 8], QFY[int(ceil(p * p / 8.0)) * 8], QFZ[int(ceil(p * p / 8.0)) * 8];
 					CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
 					CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
 					CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
 					CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
 					EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
 					EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
+					for (int ii = p * p; ii<int(ceil(p * p / 8.0)) * 8; ii++)
+					{
+						QF[ii] = 0.00;
+						QFX[ii] = 0.00;
+						QFY[ii] = 0.00;
+						QFZ[ii] = 0.00;
+					}
 					__m512d qf, qfz, qfx, qfy, c;
 					for (int j = 0; j < p * p; j = j + 8)
 					{

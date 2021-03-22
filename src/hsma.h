@@ -63,7 +63,7 @@ public:
   double FinalCalculateEnergyAndForce_Single(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][4], int ImageNumber, double **Fibonacci, double** QRD, double** QLocalRD, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance);
 
  private:
-  int me,RankID;//å½“å‰MPIæ ‡å·å’Œæ€»çš„MPIæ•°é‡
+  int me,RankID;//µ±Ç°MPI±êºÅºÍ×ÜµÄMPIÊıÁ¿
   double Lx, Ly, Lz;
   double Lambda;
   double Fp, F;
@@ -78,7 +78,7 @@ public:
   double **Fibonacci;
   double ** QRD, ** QLocalRD;
   int Np;
-  int maxatom;//æ€»çš„ç²’å­æ•°
+  int maxatom;//×ÜµÄÁ£×ÓÊı
   //double** AllSource,*AllQ;
 
   double tolerance;
