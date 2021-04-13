@@ -1,6 +1,7 @@
 # Harmonic-surface-mapping-algorithm-in-LAMMPS
 [HSMA3D](https://aip.scitation.org/doi/10.1063/1.5044438) and [HSMA2D](https://aip.scitation.org/doi/10.1063/5.0003293) (with planar dielectric interfaces) have been implemented into LAMMPS as a k-space module. This module is written via C++ and is paralleled via MPI + OpenMP. We recommend user install 'user-omp' package in Lammps. Fewer MPIs and more OpenMPs are the most efficient choice. We suggest not to use pure MPI. With optimal choice of parameters, the speed of this package is comparable to PPPM (with Intel optimization) in LAMMPS, or even faster than it. 
 
+## Installation
 For employing HSMA3D, the first thing is to include the USER-HSMA package in your LAMMPS:
 ```
 make yes-user-hsma
@@ -19,15 +20,17 @@ PKG_SYSLIB =  $(molfile_SYSLIB)
 PKG_SYSPATH = $(molfile_SYSPATH) 
 ```
 
-Next, compile the LAMMPS using
+Finally, compile the LAMMPS using
 ```
 make intel_cpu_intelmpi
 ```
 
-Finally, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
+## User guide
+For employing HSMA3D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
 ```
-kspace_style HSMA 1.0e-3 1.3 8 128 55.0 89.0 1 0
+kspace_style HSMA3D 1.0e-3 1.3 8 128 55.0 89.0 1 0
 ```
+
 The first two parameters don't need to modify. Just keep them as `"kspace_style HSMA".`
 
 1.0e-3 : the tolerance of FMM or directly compute.  
@@ -74,15 +77,16 @@ For more details of parameter setting, please refer to our SCI papers which cont
 
 Note that the 'pair style' should be set as 'lj/cut' (or lj/cut/omp, we recommend using user-omp package in Lammps) if you want to evaluate LJ potential. Please do not use pair styles which are combined with the near part of a Coulomb solver, such as'lj/cut/coul/long', etc. 
 
-In this package, we utilize an efficient implementation of FMM (FMM3D) which is developed by Greengard's group. 
+## Citation
+In this package, we utilize an efficient implementation of FMM ([FMM3D](https://github.com/flatironinstitute/FMM3D)) which is developed by Greengard's group. 
 
-If you use this package in your work and feel that this package is helpful to you, please cite one (or both) of the following papers in your citation：
+If you use this package in your work and feel that this package is helpful to you, please cite one (or more) of the following papers in your citation：
 
 1. [Q. Zhao, J. Liang, and Z. Xu, J. Chem. Phys. 149, 084111 (2018).](https://aip.scitation.org/doi/10.1063/1.5044438)
 2. [J. Liang, J. Yuan, E. Luijten, and Z. Xu, J. Chem. Phys. 152, 134109 (2020).](https://aip.scitation.org/doi/10.1063/5.0003293)
+3. [J. Liang, J. Yuan, and Z. Xu, preprint.](https://arxiv.org/abs/2104.05260)
 
-
-This version still need optimization. If you have any questions, please send a email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
+This version still need optimization. If you have any questions and suggestions, please send a email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
 
 Good luck to all of you!
 
