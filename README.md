@@ -1,7 +1,25 @@
 # Harmonic-surface-mapping-algorithm-in-LAMMPS
 [HSMA3D](https://aip.scitation.org/doi/10.1063/1.5044438) and [HSMA2D](https://aip.scitation.org/doi/10.1063/5.0003293) (with planar dielectric interfaces) have been implemented into LAMMPS as a k-space module. This module is written via C++ and is paralleled via MPI + OpenMP. We recommend user install 'user-omp' package in Lammps. Fewer MPIs and more OpenMPs are the most efficient choice. We suggest not to use pure MPI. With optimal choice of parameters, the speed of this package is comparable to PPPM (with Intel optimization) in LAMMPS, or even faster than it. 
 
-For employing HSMA3D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
+For employing HSMA3D, the first thing is to include the USER-HSMA package in your LAMMPS:
+```
+make yes-user-hsma
+```
+
+Then, add some commands into the `src/Makefile.package` file : 
+```
+SOURCE = $(wildcard ../src/OFile/* .o)
+PKG_INC = 
+PKG_PATH =  $(SOURCE) -lgfortran -lm -ldl
+PKG_LIB =   
+PKG_CPP_DEPENDS = 
+PKG_LINK_DEPENDS = 
+PKG_SYSINC =  $(molfile_SYSINC) 
+PKG_SYSLIB =  $(molfile_SYSLIB) 
+PKG_SYSPATH = $(molfile_SYSPATH) 
+```
+
+Finally, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
 ```
 kspace_style HSMA 1.0e-3 1.3 8 128 55.0 89.0 1 0
 ```
