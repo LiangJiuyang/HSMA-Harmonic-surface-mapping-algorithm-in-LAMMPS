@@ -19,6 +19,11 @@ PKG_SYSLIB =  $(molfile_SYSLIB)
 PKG_SYSPATH = $(molfile_SYSPATH) 
 ```
 
+Next, compile the LAMMPS using
+```
+make intel_cpu_intelmpi
+```
+
 Finally, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
 ```
 kspace_style HSMA 1.0e-3 1.3 8 128 55.0 89.0 1 0
