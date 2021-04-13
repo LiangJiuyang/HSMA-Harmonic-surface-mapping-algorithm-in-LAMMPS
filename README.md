@@ -7,11 +7,16 @@ For employing HSMA3D, the first thing is to include the USER-HSMA package in you
 make yes-user-hsma
 ```
 
+We recommend to install 'USER-OMP' package for the better performance of the evaluation of the LJ potential:
+```
+make yes-user-omp
+```
+
 Then, add some commands into the `src/Makefile.package` file : 
 ```
 SOURCE = $(wildcard ../src/OFile/* .o)
-PKG_INC = 
-PKG_PATH =  $(SOURCE) -lgfortran -lm -ldl
+PKG_INC = -DLMP_USER_OMP
+PKG_PATH = $(SOURCE) -lgfortran -lm -ldl
 PKG_LIB =   
 PKG_CPP_DEPENDS = 
 PKG_LINK_DEPENDS = 
@@ -76,6 +81,18 @@ The first two parameters don't need to modify. Just keep them as `"kspace_style 
 For more details of parameter setting, please refer to our SCI papers which contain the set of parameter within given accuracy. 
 
 Note that the 'pair style' should be set as 'lj/cut' (or lj/cut/omp, we recommend using user-omp package in Lammps) if you want to evaluate LJ potential. Please do not use pair styles which are combined with the near part of a Coulomb solver, such as'lj/cut/coul/long', etc. 
+
+## Examples
+Some examples of in-file are provided in the folder `HSMA_Example`.
+```
+salt_1-1.in : 1:1 electrolyte solution
+
+salt_2-1.in : 2:1 electrolyte solution
+
+salt_3-1.in : 3:1 electrolyte solution
+
+SPCE_Water.spce-bulk-nvt : the SPCE water system (17496 atoms)
+```
 
 ## Citation
 In this package, we utilize an efficient implementation of FMM ([FMM3D](https://github.com/flatironinstitute/FMM3D)) which is developed by Greengard's group. 
