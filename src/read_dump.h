@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -22,12 +22,11 @@ CommandStyle(read_dump,ReadDump)
 #ifndef LMP_READ_DUMP_H
 #define LMP_READ_DUMP_H
 
-#include <mpi.h>
-#include "pointers.h"
+#include "command.h"
 
 namespace LAMMPS_NS {
 
-class ReadDump : protected Pointers {
+class ReadDump : public Command {
  public:
   ReadDump(class LAMMPS *);
   ~ReadDump();
@@ -59,6 +58,7 @@ private:
   int firstfile;           // index of 1st dump file my cluster reads
                            //   (0 to multiproc_nfile-1)
   int filereader;          // 1 if this proc reads from a dump file(s)
+  int parallel;            // 1 if parallel reading (e.g. via ADIOS2)
 
   int dimension;           // same as in Domain
   int triclinic;

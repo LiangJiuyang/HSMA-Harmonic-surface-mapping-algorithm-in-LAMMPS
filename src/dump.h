@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -47,7 +47,7 @@ class Dump : protected Pointers {
   virtual void unpack_reverse_comm(int, int *, double *) {}
 
   void modify_params(int, char **);
-  virtual bigint memory_usage();
+  virtual double memory_usage();
 
  protected:
   int me,nprocs;             // proc info
@@ -75,6 +75,9 @@ class Dump : protected Pointers {
   int sortcol;               // 0 to sort on ID, 1-N on columns
   int sortcolm1;             // sortcol - 1
   int sortorder;             // ASCEND or DESCEND
+  int time_flag;             // 1 if output accumulated time
+  int unit_flag;             // 1 if dump should contain unit information
+  int unit_count;            // # of times the unit information was written
   int delay_flag;            // 1 if delay output until delaystep
   bigint delaystep;
 
@@ -143,6 +146,7 @@ class Dump : protected Pointers {
   virtual int convert_string(int, double *) {return 0;}
   virtual void write_data(int, double *) = 0;
   void pbc_allocate();
+  double compute_time();
 
   void sort();
 #if defined(LMP_QSORT)

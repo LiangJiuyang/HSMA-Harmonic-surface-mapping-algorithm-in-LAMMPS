@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -57,6 +57,7 @@ class FixHyperGlobal : public FixHyper {
   double maxdriftsq;       // max distance any atom drifts from original pos
   int nobias;              // # of steps when bias = 0, b/c bond too long
   int negstrain;           // # of steps when biased bond has negative strain
+  bigint groupatoms;       // # of atoms in fix group
 
   class NeighList *list;
 

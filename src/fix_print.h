@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -29,13 +29,14 @@ class FixPrint : public Fix {
   FixPrint(class LAMMPS *, int, char **);
   ~FixPrint();
   void init();
+  void setup(int);
   int setmask();
   void end_of_step();
 
  private:
   int me,screenflag;
   FILE *fp;
-  char *string,*copy,*work;
+  char *text,*copy,*work;
   int maxcopy,maxwork;
   char *var_print;
   int ivar_print;

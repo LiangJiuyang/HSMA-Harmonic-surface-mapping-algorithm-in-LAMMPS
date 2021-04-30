@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -12,12 +12,14 @@
 ------------------------------------------------------------------------- */
 
 #include "npair_half_size_bin_newton_tri_omp.h"
-#include "npair_omp.h"
-#include "neigh_list.h"
+
 #include "atom.h"
-#include "atom_vec.h"
-#include "my_page.h"
 #include "error.h"
+#include "my_page.h"
+#include "neigh_list.h"
+#include "npair_omp.h"
+
+#include "omp_compat.h"
 
 using namespace LAMMPS_NS;
 
@@ -41,7 +43,7 @@ void NPairHalfSizeBinNewtonTriOmp::build(NeighList *list)
 
   NPAIR_OMP_INIT;
 #if defined(_OPENMP)
-#pragma omp parallel default(none) shared(list)
+#pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(list)
 #endif
   NPAIR_OMP_SETUP(nlocal);
 

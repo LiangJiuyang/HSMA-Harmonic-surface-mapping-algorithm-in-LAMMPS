@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -32,8 +32,8 @@ class PPPMDipoleSpin : public PPPMDipole {
   void compute(int, int);
 
  protected:
-  double hbar;                  // reduced Planck's constant      
-  double mub;                   // Bohr's magneton                
+  double hbar;                  // reduced Planck's constant
+  double mub;                   // Bohr's magneton
   double mu_0;                  // vacuum permeability
   double mub2mu0;               // prefactor for mech force
   double mub2mu0hbinv;          // prefactor for mag force
@@ -46,7 +46,6 @@ class PPPMDipoleSpin : public PPPMDipole {
   void fieldforce_ik_spin();
   void fieldforce_peratom_spin();
   void spsum_spsq();
-
 };
 
 }

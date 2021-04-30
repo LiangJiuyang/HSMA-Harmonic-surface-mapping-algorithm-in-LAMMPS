@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -124,7 +124,7 @@ class FixRX : public Fix {
 
   // ODE Diagnostics
   //int nSteps; //!< # of accepted steps taken over all atoms.
-  //int nIters; //!< # of attemped steps for all atoms.
+  //int nIters; //!< # of attempted steps for all atoms.
   //int nFuncs; //!< # of RHS evaluations for all atoms.
   //int nFails; //!< # of ODE systems that failed (for some reason).
 

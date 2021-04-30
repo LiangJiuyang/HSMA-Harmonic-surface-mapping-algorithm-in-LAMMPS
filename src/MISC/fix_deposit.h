@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -30,6 +30,7 @@ class FixDeposit : public Fix {
   ~FixDeposit();
   int setmask();
   void init();
+  void setup_pre_exchange();
   void pre_exchange();
   void write_restart(FILE *);
   void restart(char *);
@@ -38,11 +39,11 @@ class FixDeposit : public Fix {
  private:
   int ninsert,ntype,nfreq,seed;
   int iregion,globalflag,localflag,maxattempt,rateflag,scaleflag,targetflag;
-  int mode,rigidflag,shakeflag,idnext,distflag;
+  int mode,rigidflag,shakeflag,idnext,distflag,orientflag;
   double lo,hi,deltasq,nearsq,rate,sigma;
   double vxlo,vxhi,vylo,vyhi,vzlo,vzhi;
   double xlo,xhi,ylo,yhi,zlo,zhi,xmid,ymid,zmid;
-  double tx,ty,tz;
+  double rx,ry,rz,tx,ty,tz;
   char *idregion;
   char *idrigid,*idshake;
 
@@ -54,7 +55,8 @@ class FixDeposit : public Fix {
   class Fix *fixrigid,*fixshake;
   double oneradius;
 
-  int nfirst,ninserted;
+  int ninserted;
+  bigint nfirst;
   tagint maxtag_all,maxmol_all;
   class RanPark *random;
 

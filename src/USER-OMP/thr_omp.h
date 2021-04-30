@@ -1,6 +1,6 @@
 /* -*- c++ -*- -------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -64,7 +64,7 @@ class ThrOMP {
 
  protected:
   // extra ev_tally setup work for threaded styles
-  void ev_setup_thr(int, int, int, double *, double **, ThrData *);
+  void ev_setup_thr(int, int, int, double *, double **, double **, ThrData *);
 
   // compute global per thread virial contribution from per-thread force
   void virial_fdotr_compute_thr(double * const, const double * const * const,

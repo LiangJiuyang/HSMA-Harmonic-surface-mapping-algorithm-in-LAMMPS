@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -21,25 +21,36 @@
 ------------------------------------------------------------------------- */
 
 #include "pair_ilp_graphene_hbn.h"
-#include <mpi.h>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
+
 #include "atom.h"
+#include "citeme.h"
 #include "comm.h"
+#include "error.h"
 #include "force.h"
-#include "neighbor.h"
+#include "memory.h"
+#include "my_page.h"
 #include "neigh_list.h"
 #include "neigh_request.h"
-#include "my_page.h"
-#include "memory.h"
-#include "error.h"
+#include "neighbor.h"
+
+#include <cmath>
+#include <cstring>
 
 using namespace LAMMPS_NS;
 
 #define MAXLINE 1024
 #define DELTA 4
 #define PGDELTA 1
+
+static const char cite_ilp[] =
+  "@Article{Ouyang2018\n"
+  " author = {W. Ouyang, D. Mandelli, M. Urbakh, and O. Hod},\n"
+  " title = {Nanoserpents: Graphene Nanoribbon Motion on Two-Dimensional Hexagonal Materials},\n"
+  " journal = {Nano Letters},\n"
+  " volume =  18,\n"
+  " pages =   {6009}\n"
+  " year =    2018,\n"
+  "}\n\n";
 
 /* ---------------------------------------------------------------------- */
 
@@ -48,28 +59,25 @@ PairILPGrapheneHBN::PairILPGrapheneHBN(LAMMPS *lmp) : Pair(lmp)
   restartinfo = 0;
   one_coeff = 1;
 
+  if (lmp->citeme) lmp->citeme->add(cite_ilp);
+
   nextra = 2;
   pvector = new double[nextra];
 
   // initialize element to parameter maps
-  nelements = 0;
-  elements = NULL;
-  nparams = maxparam = 0;
-  params = NULL;
-  elem2param = NULL;
-  cutILPsq = NULL;
-  map = NULL;
+  params = nullptr;
+  cutILPsq = nullptr;
 
   nmax = 0;
   maxlocal = 0;
-  ILP_numneigh = NULL;
-  ILP_firstneigh = NULL;
-  ipage = NULL;
+  ILP_numneigh = nullptr;
+  ILP_firstneigh = nullptr;
+  ipage = nullptr;
   pgsize = oneatom = 0;
 
-  normal = NULL;
-  dnormal = NULL;
-  dnormdri = NULL;
+  normal = nullptr;
+  dnormal = nullptr;
+  dnormdri = nullptr;
 
   // always compute energy offset
   offset_flag = 1;
@@ -96,13 +104,8 @@ PairILPGrapheneHBN::~PairILPGrapheneHBN()
     memory->destroy(offset);
   }
 
-  if (elements)
-    for (int i = 0; i < nelements; i++) delete [] elements[i];
-  delete [] elements;
-  memory->destroy(params);
   memory->destroy(elem2param);
   memory->destroy(cutILPsq);
-  if (allocated) delete [] map;
 }
 
 /* ----------------------------------------------------------------------
@@ -135,8 +138,8 @@ void PairILPGrapheneHBN::settings(int narg, char **arg)
   if (strcmp(force->pair_style,"hybrid/overlay")!=0)
     error->all(FLERR,"ERROR: requires hybrid/overlay pair_style");
 
-  cut_global = force->numeric(FLERR,arg[0]);
-  if (narg == 2) tap_flag = force->numeric(FLERR,arg[1]);
+  cut_global = utils::numeric(FLERR,arg[0],false,lmp);
+  if (narg == 2) tap_flag = utils::numeric(FLERR,arg[1],false,lmp);
 
   // reset cutoffs that have been explicitly set
 
@@ -154,68 +157,10 @@ void PairILPGrapheneHBN::settings(int narg, char **arg)
 
 void PairILPGrapheneHBN::coeff(int narg, char **arg)
 {
-  int i,j,n;
-
-  if (narg != 3 + atom->ntypes)
-    error->all(FLERR,"Incorrect args for pair coefficients");
   if (!allocated) allocate();
 
-  // insure I,J args are * *
-
-  if (strcmp(arg[0],"*") != 0 || strcmp(arg[1],"*") != 0)
-    error->all(FLERR,"Incorrect args for pair coefficients");
-
-  // read args that map atom types to elements in potential file
-  // map[i] = which element the Ith atom type is, -1 if NULL
-  // nelements = # of unique elements
-  // elements = list of element names
-
-  if (elements) {
-    for (i = 0; i < nelements; i++) delete [] elements[i];
-    delete [] elements;
-  }
-  elements = new char*[atom->ntypes];
-  for (i = 0; i < atom->ntypes; i++) elements[i] = NULL;
-
-  nelements = 0;
-  for (i = 3; i < narg; i++) {
-    if (strcmp(arg[i],"NULL") == 0) {
-      map[i-2] = -1;
-      continue;
-    }
-    for (j = 0; j < nelements; j++)
-      if (strcmp(arg[i],elements[j]) == 0) break;
-    map[i-2] = j;
-    if (j == nelements) {
-      n = strlen(arg[i]) + 1;
-      elements[j] = new char[n];
-      strcpy(elements[j],arg[i]);
-      nelements++;
-    }
-  }
-
-
+  map_element2type(narg-3,arg+3);
   read_file(arg[2]);
-
-  // clear setflag since coeff() called once with I,J = * *
-
-  n = atom->ntypes;
-  for (int i = 1; i <= n; i++)
-    for (int j = i; j <= n; j++)
-      setflag[i][j] = 0;
-
-  // set setflag i,j for type pairs where both are mapped to elements
-
-  int count = 0;
-  for (int i = 1; i <= n; i++)
-    for (int j = i; j <= n; j++)
-      if (map[i] >= 0 && map[j] >= 0) {
-        setflag[i][j] = 1;
-        cut[i][j] = cut_global;
-        count++;
-      }
-
-  if (count == 0) error->all(FLERR,"Incorrect args for pair coefficients");
 }
 
 
@@ -248,15 +193,15 @@ void PairILPGrapheneHBN::read_file(char *filename)
   int params_per_line = 13;
   char **words = new char*[params_per_line+1];
   memory->sfree(params);
-  params = NULL;
+  params = nullptr;
   nparams = maxparam = 0;
 
   // open file on proc 0
 
   FILE *fp;
   if (comm->me == 0) {
-    fp = force->open_potential(filename);
-    if (fp == NULL) {
+    fp = utils::open_potential(filename,lmp,nullptr);
+    if (fp == nullptr) {
       char str[128];
       snprintf(str,128,"Cannot open ILP potential file %s",filename);
       error->one(FLERR,str);
@@ -273,7 +218,7 @@ void PairILPGrapheneHBN::read_file(char *filename)
   while (1) {
     if (comm->me == 0) {
       ptr = fgets(line,MAXLINE,fp);
-      if (ptr == NULL) {
+      if (ptr == nullptr) {
         eof = 1;
         fclose(fp);
       } else n = strlen(line) + 1;
@@ -286,7 +231,7 @@ void PairILPGrapheneHBN::read_file(char *filename)
     // strip comment, skip line if blank
 
     if ((ptr = strchr(line,'#'))) *ptr = '\0';
-    nwords = atom->count_words(line);
+    nwords = utils::count_words(line);
     if (nwords == 0) continue;
 
     // concatenate additional lines until have params_per_line words
@@ -295,7 +240,7 @@ void PairILPGrapheneHBN::read_file(char *filename)
       n = strlen(line);
       if (comm->me == 0) {
         ptr = fgets(&line[n],MAXLINE-n,fp);
-        if (ptr == NULL) {
+        if (ptr == nullptr) {
           eof = 1;
           fclose(fp);
         } else n = strlen(line) + 1;
@@ -305,7 +250,7 @@ void PairILPGrapheneHBN::read_file(char *filename)
       MPI_Bcast(&n,1,MPI_INT,0,world);
       MPI_Bcast(line,n,MPI_CHAR,0,world);
       if ((ptr = strchr(line,'#'))) *ptr = '\0';
-      nwords = atom->count_words(line);
+      nwords = utils::count_words(line);
     }
 
     if (nwords != params_per_line)
@@ -315,7 +260,7 @@ void PairILPGrapheneHBN::read_file(char *filename)
 
     nwords = 0;
     words[nwords++] = strtok(line," \t\n\r\f");
-    while ((words[nwords++] = strtok(NULL," \t\n\r\f"))) continue;
+    while ((words[nwords++] = strtok(nullptr," \t\n\r\f"))) continue;
 
     // ielement,jelement = 1st args
     // if these 2 args are in element list, then parse this line
@@ -334,6 +279,11 @@ void PairILPGrapheneHBN::read_file(char *filename)
       maxparam += DELTA;
       params = (Param *) memory->srealloc(params,maxparam*sizeof(Param),
                                           "pair:params");
+
+      // make certain all addional allocated storage is initialized
+      // to avoid false positives when checking with valgrind
+
+      memset(params + nparams, 0, DELTA*sizeof(Param));
     }
 
     params[nparams].ielement = ielement;
@@ -408,7 +358,7 @@ void PairILPGrapheneHBN::init_style()
   // create pages if first time or if neighbor pgsize/oneatom has changed
 
   int create = 0;
-  if (ipage == NULL) create = 1;
+  if (ipage == nullptr) create = 1;
   if (pgsize != neighbor->pgsize) create = 1;
   if (oneatom != neighbor->oneatom) create = 1;
 
@@ -442,13 +392,13 @@ void PairILPGrapheneHBN::compute(int eflag, int vflag)
   if (vflag_fdotr) virial_fdotr_compute();
 }
 
-/* ---------------------------------------------------------------------- 
+/* ----------------------------------------------------------------------
    van der Waals forces and energy
 ------------------------------------------------------------------------- */
 
-void PairILPGrapheneHBN::calc_FvdW(int eflag, int vflag)
+void PairILPGrapheneHBN::calc_FvdW(int eflag, int /* vflag */)
 {
-  int i,j,ii,jj,inum,jnum,itype,jtype,k,l,kk,ll;
+  int i,j,ii,jj,inum,jnum,itype,jtype;
   tagint itag,jtag;
   double xtmp,ytmp,ztmp,delx,dely,delz,evdwl,fpair;
   double rsq,r,Rcut,r2inv,r6inv,r8inv,Tap,dTap,Vilp,TSvdw,TSvdw2inv,fsum;
@@ -500,7 +450,7 @@ void PairILPGrapheneHBN::calc_FvdW(int eflag, int vflag)
       delz = ztmp - x[j][2];
       rsq = delx*delx + dely*dely + delz*delz;
 
-      // only include the interation between different layers
+      // only include the interaction between different layers
       if (rsq < cutsq[itype][jtype] && atom->molecule[i] != atom->molecule[j]) {
 
         int iparam_ij = elem2param[map[itype]][map[jtype]];
@@ -523,7 +473,7 @@ void PairILPGrapheneHBN::calc_FvdW(int eflag, int vflag)
 
         // derivatives
         fpair = -6.0*p.C6*r8inv/TSvdw + p.C6*p.d/p.seff*(TSvdw-1.0)*TSvdw2inv*r8inv*r;
-	fsum = fpair*Tap - Vilp*dTap/r;
+        fsum = fpair*Tap - Vilp*dTap/r;
 
         f[i][0] += fsum*delx;
         f[i][1] += fsum*dely;
@@ -540,19 +490,19 @@ void PairILPGrapheneHBN::calc_FvdW(int eflag, int vflag)
   }
 }
 
-/* ---------------------------------------------------------------------- 
+/* ----------------------------------------------------------------------
    Repulsive forces and energy
 ------------------------------------------------------------------------- */
 
-void PairILPGrapheneHBN::calc_FRep(int eflag, int vflag)
+void PairILPGrapheneHBN::calc_FRep(int eflag, int /* vflag */)
 {
   int i,j,ii,jj,inum,jnum,itype,jtype,k,kk;
   double prodnorm1,fkcx,fkcy,fkcz;
   double xtmp,ytmp,ztmp,delx,dely,delz,evdwl,fpair,fpair1;
-  double rsq,r,Rcut,rhosq1,exp0,exp1,r2inv,r6inv,r8inv,Tap,dTap,Vilp;
-  double frho1,TSvdw,TSvdw2inv,Erep,fsum,rdsq1;
+  double rsq,r,Rcut,rhosq1,exp0,exp1,Tap,dTap,Vilp;
+  double frho1,Erep,fsum,rdsq1;
   int *ilist,*jlist,*numneigh,**firstneigh;
-  int *ILP_neighs_i,*ILP_neighs_j;
+  int *ILP_neighs_i;
 
   evdwl = 0.0;
 
@@ -576,9 +526,6 @@ void PairILPGrapheneHBN::calc_FRep(int eflag, int vflag)
   // loop over neighbors of owned atoms
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
-    if (ILP_numneigh[i] == -1) {
-      continue;
-    }
     xtmp = x[i][0];
     ytmp = x[i][1];
     ztmp = x[i][2];
@@ -589,9 +536,6 @@ void PairILPGrapheneHBN::calc_FRep(int eflag, int vflag)
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
       j &= NEIGHMASK;
-      if (ILP_numneigh[j] == -1) {
-        continue;
-      }
       jtype = type[j];
 
       delx = xtmp - x[j][0];
@@ -599,7 +543,7 @@ void PairILPGrapheneHBN::calc_FRep(int eflag, int vflag)
       delz = ztmp - x[j][2];
       rsq = delx*delx + dely*dely + delz*delz;
 
-      // only include the interation between different layers
+      // only include the interaction between different layers
       if (rsq < cutsq[itype][jtype] && atom->molecule[i] != atom->molecule[j]) {
 
         int iparam_ij = elem2param[map[itype]][map[jtype]];
@@ -634,12 +578,12 @@ void PairILPGrapheneHBN::calc_FRep(int eflag, int vflag)
         dprodnorm1[0] = dnormdri[0][0][i]*delx + dnormdri[1][0][i]*dely + dnormdri[2][0][i]*delz;
         dprodnorm1[1] = dnormdri[0][1][i]*delx + dnormdri[1][1][i]*dely + dnormdri[2][1][i]*delz;
         dprodnorm1[2] = dnormdri[0][2][i]*delx + dnormdri[1][2][i]*dely + dnormdri[2][2][i]*delz;
-  	fp1[0] = prodnorm1*normal[i][0]*fpair1;
-  	fp1[1] = prodnorm1*normal[i][1]*fpair1;
-  	fp1[2] = prodnorm1*normal[i][2]*fpair1;
-  	fprod1[0] = prodnorm1*dprodnorm1[0]*fpair1;
-  	fprod1[1] = prodnorm1*dprodnorm1[1]*fpair1;
-  	fprod1[2] = prodnorm1*dprodnorm1[2]*fpair1;
+        fp1[0] = prodnorm1*normal[i][0]*fpair1;
+        fp1[1] = prodnorm1*normal[i][1]*fpair1;
+        fp1[2] = prodnorm1*normal[i][2]*fpair1;
+        fprod1[0] = prodnorm1*dprodnorm1[0]*fpair1;
+        fprod1[1] = prodnorm1*dprodnorm1[1]*fpair1;
+        fprod1[2] = prodnorm1*dprodnorm1[2]*fpair1;
 
         fkcx = (delx*fsum - fp1[0])*Tap - Vilp*dTap*delx/r;
         fkcy = (dely*fsum - fp1[1])*Tap - Vilp*dTap*dely/r;
@@ -681,12 +625,12 @@ void PairILPGrapheneHBN::calc_FRep(int eflag, int vflag)
 }
 
 /* ----------------------------------------------------------------------
-   create ILP neighbor list from main neighbor list to calcualte normals
+   create ILP neighbor list from main neighbor list to calculate normals
 ------------------------------------------------------------------------- */
 
 void PairILPGrapheneHBN::ILP_neigh()
 {
-  int i,j,ii,jj,n,allnum,inum,jnum,itype,jtype;
+  int i,j,ii,jj,n,allnum,jnum,itype,jtype;
   double xtmp,ytmp,ztmp,delx,dely,delz,rsq;
   int *ilist,*jlist,*numneigh,**firstneigh;
   int *neighptr;
@@ -702,7 +646,6 @@ void PairILPGrapheneHBN::ILP_neigh()
     ILP_firstneigh = (int **) memory->smalloc(maxlocal*sizeof(int *),"ILPGrapheneHBN:firstneigh");
   }
 
-  inum = list->inum;
   allnum = list->inum + list->gnum;
   ilist = list->ilist;
   numneigh = list->numneigh;
@@ -741,17 +684,8 @@ void PairILPGrapheneHBN::ILP_neigh()
     } // loop over jj
 
     ILP_firstneigh[i] = neighptr;
-    if (n == 3) {
-      ILP_numneigh[i] = n;
-    }
-    else if (n < 3) {
-      if (i < inum) {
-        ILP_numneigh[i] = n;
-      } else {
-        ILP_numneigh[i] = -1;
-      }
-    }
-    else if (n > 3) error->one(FLERR,"There are too many neighbors for some atoms, please check your configuration");
+    ILP_numneigh[i] = n;
+    if (n > 3) error->one(FLERR,"There are too many neighbors for some atoms, please check your configuration");
 
     ipage->vgot(n);
     if (ipage->status())
@@ -792,19 +726,19 @@ void PairILPGrapheneHBN::calc_normal()
     i = ilist[ii];
 
     //   Initialize the arrays
-    for (id = 0; id < 3; id++){
+    for (id = 0; id < 3; id++) {
       pv12[id] = 0.0;
       pv31[id] = 0.0;
       pv23[id] = 0.0;
       n1[id] = 0.0;
       dni[id] = 0.0;
       normal[i][id] = 0.0;
-      for (ip = 0; ip < 3; ip++){
+      for (ip = 0; ip < 3; ip++) {
         vet[ip][id] = 0.0;
         dnn[ip][id] = 0.0;
         dpvdri[ip][id] = 0.0;
         dnormdri[ip][id][i] = 0.0;
-        for (m = 0; m < 3; m++){
+        for (m = 0; m < 3; m++) {
           dpv12[ip][id][m] = 0.0;
           dpv31[ip][id][m] = 0.0;
           dpv23[ip][id][m] = 0.0;
@@ -814,9 +748,6 @@ void PairILPGrapheneHBN::calc_normal()
       }
     }
 
-    if (ILP_numneigh[i] == -1) {
-      continue;
-    }
     xtp = x[i][0];
     ytp = x[i][1];
     ztp = x[i][2];
@@ -841,10 +772,10 @@ void PairILPGrapheneHBN::calc_normal()
       normal[i][0] = 0.0;
       normal[i][1] = 0.0;
       normal[i][2] = 1.0;
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
           dnormdri[id][ip][i] = 0.0;
-          for (m = 0; m < 3; m++){
+          for (m = 0; m < 3; m++) {
             dnormal[id][ip][m][i] = 0.0;
           }
         }
@@ -890,8 +821,8 @@ void PairILPGrapheneHBN::calc_normal()
 
       // derivatives respect to the third neighbor, atom n
       // derivatives of pv12 to rn is zero
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
           dpv12[id][ip][2] = 0.0;
         }
       }
@@ -912,15 +843,15 @@ void PairILPGrapheneHBN::calc_normal()
       dni[1] = (n1[0]*dpvdri[0][1] + n1[1]*dpvdri[1][1] + n1[2]*dpvdri[2][1])/nn;
       dni[2] = (n1[0]*dpvdri[0][2] + n1[1]*dpvdri[1][2] + n1[2]*dpvdri[2][2])/nn;
       // derivatives of unit vector ni respect to ri, the result is 3x3 matrix
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
           dnormdri[id][ip][i] = dpvdri[id][ip]/nn - n1[id]*dni[ip]/nn2;
         }
       }
       // derivatives of non-normalized normal vector, dn1:3x3x3 array
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
-          for (m = 0; m < 3; m++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
+          for (m = 0; m < 3; m++) {
             dn1[id][ip][m] = dpv12[id][ip][m];
           }
         }
@@ -928,16 +859,16 @@ void PairILPGrapheneHBN::calc_normal()
       // derivatives of nn, dnn:3x3 vector
       // dnn[id][m]: the derivative of nn respect to r[id][m], id,m=0,1,2
       // r[id][m]: the id's component of atom m
-      for (m = 0; m < 3; m++){
-        for (id = 0; id < 3; id++){
+      for (m = 0; m < 3; m++) {
+        for (id = 0; id < 3; id++) {
           dnn[id][m] = (n1[0]*dn1[0][id][m] + n1[1]*dn1[1][id][m] + n1[2]*dn1[2][id][m])/nn;
         }
       }
       // dnormal[id][ip][m][i]: the derivative of normal[id] respect to r[ip][m], id,ip=0,1,2
       // for atom m, which is a neighbor atom of atom i, m=0,jnum-1
-      for (m = 0; m < 3; m++){
-        for (id = 0; id < 3; id++){
-          for (ip = 0; ip < 3; ip++){
+      for (m = 0; m < 3; m++) {
+        for (id = 0; id < 3; id++) {
+          for (ip = 0; ip < 3; ip++) {
             dnormal[id][ip][m][i] = dn1[id][ip][m]/nn - n1[id]*dnn[ip][m]/nn2;
           }
         }
@@ -945,7 +876,7 @@ void PairILPGrapheneHBN::calc_normal()
     }
 //##############################################################################################
 
-    else if(cont == 3) {
+    else if (cont == 3) {
       pv12[0] = vet[0][1]*vet[1][2] - vet[1][1]*vet[0][2];
       pv12[1] = vet[0][2]*vet[1][0] - vet[1][2]*vet[0][0];
       pv12[2] = vet[0][0]*vet[1][1] - vet[1][0]*vet[0][1];
@@ -971,8 +902,8 @@ void PairILPGrapheneHBN::calc_normal()
       dpv12[2][2][1] =  0.0;
 
       // derivatives respect to the third neighbor, atom n
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
           dpv12[id][ip][2] = 0.0;
         }
       }
@@ -1001,8 +932,8 @@ void PairILPGrapheneHBN::calc_normal()
       dpv31[2][1][2] = -vet[0][0];
       dpv31[2][2][2] =  0.0;
       // derivatives respect to the second neighbor, atom l
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
           dpv31[id][ip][1] = 0.0;
         }
       }
@@ -1011,8 +942,8 @@ void PairILPGrapheneHBN::calc_normal()
       pv23[1] = vet[1][2]*vet[2][0] - vet[2][2]*vet[1][0];
       pv23[2] = vet[1][0]*vet[2][1] - vet[2][0]*vet[1][1];
       // derivatives respect to the second neighbor, atom k
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
           dpv23[id][ip][0] = 0.0;
         }
       }
@@ -1052,16 +983,16 @@ void PairILPGrapheneHBN::calc_normal()
       normal[i][2] = n1[2]/nn;
 
       // for the central atoms, dnormdri is always zero
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
           dnormdri[id][ip][i] = 0.0;
         }
       }
 
       // derivatives of non-normalized normal vector, dn1:3x3x3 array
-      for (id = 0; id < 3; id++){
-        for (ip = 0; ip < 3; ip++){
-          for (m = 0; m < 3; m++){
+      for (id = 0; id < 3; id++) {
+        for (ip = 0; ip < 3; ip++) {
+          for (m = 0; m < 3; m++) {
             dn1[id][ip][m] = (dpv12[id][ip][m] + dpv23[id][ip][m] + dpv31[id][ip][m])/cont;
           }
         }
@@ -1069,16 +1000,16 @@ void PairILPGrapheneHBN::calc_normal()
       // derivatives of nn, dnn:3x3 vector
       // dnn[id][m]: the derivative of nn respect to r[id][m], id,m=0,1,2
       // r[id][m]: the id's component of atom m
-      for (m = 0; m < 3; m++){
-        for (id = 0; id < 3; id++){
+      for (m = 0; m < 3; m++) {
+        for (id = 0; id < 3; id++) {
           dnn[id][m] = (n1[0]*dn1[0][id][m] + n1[1]*dn1[1][id][m] + n1[2]*dn1[2][id][m])/nn;
         }
       }
       // dnormal[id][ip][m][i]: the derivative of normal[id] respect to r[ip][m], id,ip=0,1,2
       // for atom m, which is a neighbor atom of atom i, m=0,jnum-1
-      for (m = 0; m < 3; m++){
-        for (id = 0; id < 3; id++){
-          for (ip = 0; ip < 3; ip++){
+      for (m = 0; m < 3; m++) {
+        for (id = 0; id < 3; id++) {
+          for (ip = 0; ip < 3; ip++) {
             dnormal[id][ip][m][i] = dn1[id][ip][m]/nn - n1[id]*dnn[ip][m]/nn2;
           }
         }

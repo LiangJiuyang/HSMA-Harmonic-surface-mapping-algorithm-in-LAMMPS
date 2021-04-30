@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -38,6 +38,7 @@ class PairLJSmoothLinear : public Pair {
   void write_restart_settings(FILE *);
   void read_restart_settings(FILE *);
   double single(int, int, int, int, double, double, double, double &);
+  double single_hessian(int, int, int, int, double, double[3], double, double, double&, double[6]);
 
  protected:
   double cut_global;

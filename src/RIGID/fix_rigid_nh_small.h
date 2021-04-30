@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -38,7 +38,6 @@ class FixRigidNHSmall : public FixRigidSmall {
 
   int dimension;                      // # of dimensions
   int nf_t,nf_r;                      // trans/rot degrees of freedom
-  double onednft,onednfr;             // factors 1 + dimension/trans(rot) degrees of freedom
   double *w,*wdti1,*wdti2,*wdti4;     // Yoshida-Suzuki coefficients
   double *q_t,*q_r;                   // trans/rot thermostat masses
   double *eta_t,*eta_r;               // trans/rot thermostat positions
@@ -53,7 +52,7 @@ class FixRigidNHSmall : public FixRigidSmall {
 
   int kspace_flag;                    // 1 if KSpace invoked, 0 if not
   int nrigidfix;                      // number of rigid fixes
-  int *rfix;                          // indicies of rigid fixes
+  int *rfix;                          // indices of rigid fixes
 
   double vol0;                        // reference volume
   double t0;                          // reference temperature

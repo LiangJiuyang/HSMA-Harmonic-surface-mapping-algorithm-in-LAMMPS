@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -30,7 +30,7 @@
 #include "comm.h"
 #include "memory.h"
 #include "error.h"
-#include "math_const.h" 
+#include "math_const.h"
 
 #ifdef DBL_EPSILON
   #define MY_EPSILON (10.0*DBL_EPSILON)
@@ -40,12 +40,12 @@
 
 using namespace LAMMPS_NS;
 using namespace MathConst;
-using namespace std;
+
 /* ---------------------------------------------------------------------- */
 
 ComputeHexOrderAtom::ComputeHexOrderAtom(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg),
-  distsq(NULL), nearest(NULL), qnarray(NULL)
+  distsq(nullptr), nearest(nullptr), qnarray(nullptr)
 {
   if (narg < 3 ) error->all(FLERR,"Illegal compute hexorder/atom command");
 
@@ -59,7 +59,7 @@ ComputeHexOrderAtom::ComputeHexOrderAtom(LAMMPS *lmp, int narg, char **arg) :
   while (iarg < narg) {
     if (strcmp(arg[iarg],"degree") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal compute hexorder/atom command");
-      ndegree = force->numeric(FLERR,arg[iarg+1]);
+      ndegree = utils::numeric(FLERR,arg[iarg+1],false,lmp);
       if (ndegree < 0)
         error->all(FLERR,"Illegal compute hexorder/atom command");
       iarg += 2;
@@ -68,14 +68,14 @@ ComputeHexOrderAtom::ComputeHexOrderAtom(LAMMPS *lmp, int narg, char **arg) :
       if (strcmp(arg[iarg+1],"NULL") == 0)
         nnn = 0;
       else {
-        nnn = force->numeric(FLERR,arg[iarg+1]);
+        nnn = utils::numeric(FLERR,arg[iarg+1],false,lmp);
         if (nnn < 0)
           error->all(FLERR,"Illegal compute hexorder/atom command");
       }
       iarg += 2;
     } else if (strcmp(arg[iarg],"cutoff") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal compute hexorder/atom command");
-      double cutoff = force->numeric(FLERR,arg[iarg+1]);
+      double cutoff = utils::numeric(FLERR,arg[iarg+1],false,lmp);
       if (cutoff <= 0.0)
         error->all(FLERR,"Illegal compute hexorder/atom command");
       cutsq = cutoff*cutoff;
@@ -104,7 +104,7 @@ ComputeHexOrderAtom::~ComputeHexOrderAtom()
 
 void ComputeHexOrderAtom::init()
 {
-  if (force->pair == NULL)
+  if (force->pair == nullptr)
     error->all(FLERR,"Compute hexorder/atom requires a pair style be defined");
   if (cutsq == 0.0) cutsq = force->pair->cutforce * force->pair->cutforce;
   else if (sqrt(cutsq) > force->pair->cutforce)
@@ -239,7 +239,7 @@ void ComputeHexOrderAtom::compute_peratom()
       }
       qn[0] = usum/nnn;
       qn[1] = vsum/nnn;
-    }
+    } else qn[0] = qn[1] = 0.0;
   }
 }
 
@@ -249,10 +249,8 @@ inline void ComputeHexOrderAtom::calc_qn_complex(double delx, double dely, doubl
   double rinv = 1.0/sqrt(delx*delx+dely*dely);
   double x = delx*rinv;
   double y = dely*rinv;
-  //std::complex<double> z(x, y);
-  //std::complex<double> zn = pow(z, ndegree);
-  complex<double> z(x, y);
-  complex<double> zn = pow(z, ndegree);
+  std::complex<double> z(x, y);
+  std::complex<double> zn = pow(z, ndegree);
   u = real(zn);
   v = imag(zn);
 }
@@ -262,8 +260,8 @@ inline void ComputeHexOrderAtom::calc_qn_complex(double delx, double dely, doubl
 
 inline void ComputeHexOrderAtom::calc_qn_trig(double delx, double dely, double &u, double &v) {
   double ntheta;
-  if(fabs(delx) <= MY_EPSILON) {
-    if(dely > 0.0) ntheta = ndegree * MY_PI / 2.0;
+  if (fabs(delx) <= MY_EPSILON) {
+    if (dely > 0.0) ntheta = ndegree * MY_PI / 2.0;
     else ntheta = ndegree * 3.0 * MY_PI / 2.0;
   } else ntheta = ndegree * atan(dely / delx);
   u = cos(ntheta);
@@ -340,9 +338,9 @@ void ComputeHexOrderAtom::select2(int k, int n, double *arr, int *iarr)
 
 double ComputeHexOrderAtom::memory_usage()
 {
-  double bytes = ncol*nmax * sizeof(double);
-  bytes += maxneigh * sizeof(double);
-  bytes += maxneigh * sizeof(int);
+  double bytes = (double)ncol*nmax * sizeof(double);
+  bytes += (double)maxneigh * sizeof(double);
+  bytes += (double)maxneigh * sizeof(int);
 
   return bytes;
 }

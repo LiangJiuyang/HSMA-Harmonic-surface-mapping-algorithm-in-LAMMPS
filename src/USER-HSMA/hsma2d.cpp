@@ -51,17 +51,17 @@ HSMA2D::HSMA2D(LAMMPS* lmp) : KSpace(lmp)
 void HSMA2D::settings(int narg, char** arg)
 {
 	if (narg != 10) error->all(FLERR, "Illegal kspace_style HSMA2D command");
-	tolerance = fabs(force->numeric(FLERR, arg[0]));
+	tolerance = fabs(utils::numeric(FLERR, arg[0], false, lmp));
 
-	Lambda = force->numeric(FLERR, arg[1]);
-	Gamma= force->numeric(FLERR, arg[2]);
-	p = force->numeric(FLERR, arg[3]);
-	Nw = force->numeric(FLERR, arg[4]);
-	w = force->numeric(FLERR, arg[5]);
-	Fp = force->numeric(FLERR, arg[6]);
-	F = force->numeric(FLERR, arg[7]);
-	IF_FMM_RightTerm = force->numeric(FLERR, arg[8]);
-	IF_FMM_FinalPotential = force->numeric(FLERR, arg[9]);
+	Lambda = utils::numeric(FLERR, arg[1], false, lmp);
+	Gamma= utils::numeric(FLERR, arg[2], false, lmp);
+	p = utils::numeric(FLERR, arg[3], false, lmp);
+	Nw = utils::numeric(FLERR, arg[4], false, lmp);
+	w = utils::numeric(FLERR, arg[5], false, lmp);
+	Fp = utils::numeric(FLERR, arg[6], false, lmp);
+	F = utils::numeric(FLERR, arg[7], false, lmp);
+	IF_FMM_RightTerm = utils::numeric(FLERR, arg[8], false, lmp);
+	IF_FMM_FinalPotential = utils::numeric(FLERR, arg[9], false, lmp);
 }
 
 /* ---------------------------------------------------------------------- */

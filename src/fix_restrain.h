@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -43,15 +43,17 @@ class FixRestrain : public Fix {
   int nrestrain,maxrestrain;
   int *rstyle;
   int *mult;
-  int **ids;
-  double *kstart,*kstop,*target;
+  tagint **ids;
+  double *kstart,*kstop,*deqstart,*deqstop,*target;
   double *cos_target,*sin_target;
   double energy,energy_all;
   double ebond,ebond_all;
+  double elbound,elbound_all;
   double eangle,eangle_all;
   double edihed,edihed_all;
 
   void restrain_bond(int);
+  void restrain_lbound(int);
   void restrain_angle(int);
   void restrain_dihedral(int);
 };

@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -12,7 +12,7 @@
 ------------------------------------------------------------------------- */
 
 #include "compute_temp.h"
-#include <mpi.h>
+
 #include "atom.h"
 #include "update.h"
 #include "force.h"
@@ -38,7 +38,7 @@ ComputeTemp::ComputeTemp(LAMMPS *lmp, int narg, char **arg) :
   vector = new double[size_vector];
 }
 
-/* ---------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------- */
 
 ComputeTemp::~ComputeTemp()
 {
@@ -71,9 +71,6 @@ void ComputeTemp::dof_compute()
 
 double ComputeTemp::compute_scalar()
 {
-
-
-
   invoked_scalar = update->ntimestep;
 
   double **v = atom->v;
@@ -102,16 +99,12 @@ double ComputeTemp::compute_scalar()
     error->all(FLERR,"Temperature compute degrees of freedom < 0");
   scalar *= tfactor;
   return scalar;
-
-
 }
 
 /* ---------------------------------------------------------------------- */
 
 void ComputeTemp::compute_vector()
 {
-
-
   int i;
 
   invoked_vector = update->ntimestep;
@@ -140,6 +133,4 @@ void ComputeTemp::compute_vector()
 
   MPI_Allreduce(t,vector,6,MPI_DOUBLE,MPI_SUM,world);
   for (i = 0; i < 6; i++) vector[i] *= force->mvv2e;
-
-
 }

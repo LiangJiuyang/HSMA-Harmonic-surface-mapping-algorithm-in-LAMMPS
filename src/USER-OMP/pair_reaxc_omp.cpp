@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -34,7 +34,7 @@
  ------------------------------------------------------------------------- */
 
 #include "pair_reaxc_omp.h"
-#include <mpi.h>
+
 #include <cmath>
 #include "atom.h"
 #include "update.h"
@@ -48,7 +48,7 @@
 #include "citeme.h"
 #include "memory.h"
 #include "error.h"
-#include "timer.h"
+
 
 #include "reaxc_defs.h"
 #include "reaxc_types.h"
@@ -92,7 +92,7 @@ PairReaxCOMP::PairReaxCOMP(LAMMPS *lmp) : PairReaxC(lmp), ThrOMP(lmp, THR_PAIR)
   system->pair_ptr = this;
   system->omp_active = 1;
 
-  num_nbrs_offset = NULL;
+  num_nbrs_offset = nullptr;
 
 #ifdef OMP_TIMING
   for (int i=0;i<LASTTIMINGINDEX;i++) {
@@ -241,7 +241,7 @@ void PairReaxCOMP::compute(int eflag, int vflag)
 #if defined(_OPENMP)
 #pragma omp parallel for schedule(static)
 #endif
-  for(int k = 0; k < system->N; ++k) {
+  for (int k = 0; k < system->N; ++k) {
     num_bonds[k] = system->my_atoms[k].num_bonds;
     num_hbonds[k] = system->my_atoms[k].num_hbonds;
   }
@@ -285,16 +285,15 @@ void PairReaxCOMP::compute(int eflag, int vflag)
 
   if (vflag_fdotr) virial_fdotr_compute();
 
-// Set internal timestep counter to that of LAMMPS
+  // Set internal timestep counter to that of LAMMPS
 
   data->step = update->ntimestep;
 
   Output_Results( system, control, data, &lists, out_control, mpi_data );
 
   // populate tmpid and tmpbo arrays for fix reax/c/species
-  int i, j;
 
-  if(fixspecies_flag) {
+  if (fixspecies_flag) {
     if (system->N > nmax) {
       memory->destroy(tmpid);
       memory->destroy(tmpbo);
@@ -306,8 +305,8 @@ void PairReaxCOMP::compute(int eflag, int vflag)
 #if defined(_OPENMP)
 #pragma omp parallel for collapse(2) schedule(static) default(shared)
 #endif
-    for (i = 0; i < system->N; i ++)
-      for (j = 0; j < MAXSPECBOND; j ++) {
+    for (int i = 0; i < system->N; i++)
+      for (int j = 0; j < MAXSPECBOND; j++) {
         tmpbo[i][j] = 0.0;
         tmpid[i][j] = 0;
       }
@@ -325,9 +324,10 @@ void PairReaxCOMP::init_style( )
 
   // firstwarn = 1;
 
-  int iqeq = modify->find_fix_by_style("qeq/reax/omp");
-  if (iqeq < 0 && qeqflag == 1)
-    error->all(FLERR,"Pair reax/c/omp requires use of fix qeq/reax/omp");
+  bool have_qeq = ((modify->find_fix_by_style("^qeq/reax") != -1)
+                   || (modify->find_fix_by_style("^qeq/shielded") != -1));
+  if (!have_qeq && qeqflag == 1)
+    error->all(FLERR,"Pair reax/c requires use of fix qeq/reax or qeq/shielded");
 
   system->n = atom->nlocal; // my atoms
   system->N = atom->nlocal + atom->nghost; // mine + ghosts
@@ -365,10 +365,10 @@ void PairReaxCOMP::init_style( )
     error->warning(FLERR,"Total cutoff < 2*bond cutoff. May need to use an "
                    "increased neighbor list skin.");
 
-  for( int i = 0; i < LIST_N; ++i )
+  for (int i = 0; i < LIST_N; ++i)
     lists[i].allocated = 0;
 
-  if (fix_reax == NULL) {
+  if (fix_reax == nullptr) {
     char **fixarg = new char*[3];
     fixarg[0] = (char *) fix_id;
     fixarg[1] = (char *) "all";
@@ -424,7 +424,7 @@ void PairReaxCOMP::setup( )
     write_reax_atoms();
 
     int num_nbrs = estimate_reax_lists();
-    if(!Make_List(system->total_cap, num_nbrs, TYP_FAR_NEIGHBOR,
+    if (!Make_List(system->total_cap, num_nbrs, TYP_FAR_NEIGHBOR,
                   lists+FAR_NBRS))
       error->all(FLERR,"Pair reax/c problem in far neighbor list");
 
@@ -433,7 +433,7 @@ void PairReaxCOMP::setup( )
     InitializeOMP( system, control, data, workspace, &lists, out_control,
                 mpi_data, world );
 
-    for( int k = 0; k < system->N; ++k ) {
+    for (int k = 0; k < system->N; ++k) {
       num_bonds[k] = system->my_atoms[k].num_bonds;
       num_hbonds[k] = system->my_atoms[k].num_hbonds;
     }
@@ -446,7 +446,7 @@ void PairReaxCOMP::setup( )
 
     // reset the bond list info for new atoms
 
-    for(int k = oldN; k < system->N; ++k)
+    for (int k = oldN; k < system->N; ++k)
       Set_End_Index( k, Start_Index( k, lists+BONDS ), lists+BONDS );
 
     // estimate far neighbor list size
@@ -472,7 +472,7 @@ void PairReaxCOMP::write_reax_atoms()
 #if defined(_OPENMP)
 #pragma omp parallel for schedule(static) default(shared)
 #endif
-  for( int i = 0; i < system->N; ++i ){
+  for (int i = 0; i < system->N; ++i) {
     system->my_atoms[i].orig_id = atom->tag[i];
     system->my_atoms[i].type = map[atom->type[i]];
     system->my_atoms[i].x[0] = atom->x[i][0];
@@ -508,7 +508,7 @@ int PairReaxCOMP::estimate_reax_lists()
     num_nbrs += numneigh[i];
   }
 
-  int new_estimate = MAX (num_nbrs, mincap*MIN_NBRS);
+  int new_estimate = MAX(num_nbrs, mincap*REAX_MIN_NBRS);
 
   return new_estimate;
 }
@@ -596,7 +596,7 @@ void PairReaxCOMP::read_reax_forces(int /* vflag */)
 #if defined(_OPENMP)
 #pragma omp parallel for schedule(static) default(shared)
 #endif
-  for( int i = 0; i < system->N; ++i ) {
+  for (int i = 0; i < system->N; ++i) {
     system->my_atoms[i].f[0] = workspace->f[i][0];
     system->my_atoms[i].f[1] = workspace->f[i][1];
     system->my_atoms[i].f[2] = workspace->f[i][2];
@@ -612,26 +612,24 @@ void PairReaxCOMP::read_reax_forces(int /* vflag */)
 void PairReaxCOMP::FindBond()
 {
   const double bo_cut = 0.10;
-  int i;
 
 #if defined(_OPENMP)
-#pragma omp parallel for schedule(static) default(shared)   \
-  private(i)
+#pragma omp parallel for schedule(static) default(shared)
 #endif
-  for (i = 0; i < system->n; i++) {
+  for (int i = 0; i < system->n; i++) {
     int j, pj, nj;
     double bo_tmp;
     bond_data *bo_ij;
 
     nj = 0;
-    for( pj = Start_Index(i, lists); pj < End_Index(i, lists); ++pj ) {
+    for (pj = Start_Index(i, lists); pj < End_Index(i, lists); ++pj) {
       bo_ij = &( lists->select.bond_list[pj] );
       j = bo_ij->nbr;
       if (j < i) continue;
 
       bo_tmp = bo_ij->bo_data.BO;
 
-      if (bo_tmp >= bo_cut ) {
+      if (bo_tmp >= bo_cut) {
         tmpid[i][nj] = j;
         tmpbo[i][nj] = bo_tmp;
         nj ++;

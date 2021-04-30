@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -88,6 +88,10 @@ class PairKIM : public Pair {
   virtual void unpack_reverse_comm(int, int*, double*);
   virtual double memory_usage();
 
+  // Get the KIM_Model object
+  KIM_Model *get_kim_model();
+  // Get the atom type list
+  std::string get_atom_type_list();
  protected:
   // (nearly) all bool flags are not initialized in constructor, but set
   // explicitly in the indicated function.  All other data members are
@@ -97,6 +101,9 @@ class PairKIM : public Pair {
 
   // values set in settings()
   char* kim_modelname;
+
+  // list of args that map atom species to KIM elements
+  std::string atom_type_list;
 
   // values set in coeff()
 

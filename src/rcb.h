@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -14,7 +14,6 @@
 #ifndef LAMMPS_RCB_H
 #define LAMMPS_RCB_H
 
-#include <mpi.h>
 #include "pointers.h"
 
 namespace LAMMPS_NS {
@@ -44,7 +43,7 @@ class RCB : protected Pointers {
   void compute(int, int, double **, double *, double *, double *);
   void compute_old(int, int, double **, double *, double *, double *);
   void invert(int sortflag = 0);
-  bigint memory_usage();
+  double memory_usage();
 
   // DEBUG methods
   //void check();

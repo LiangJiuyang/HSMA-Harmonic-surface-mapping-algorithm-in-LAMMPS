@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -29,7 +29,7 @@ class DumpLocal : public Dump {
   DumpLocal(LAMMPS *, int, char **);
   virtual ~DumpLocal();
 
- private:
+ protected:
   int nevery;                // dump frequency to check Fix against
   char *label;               // string for dump file header
 
@@ -55,15 +55,15 @@ class DumpLocal : public Dump {
 
   void init_style();
   int modify_param(int, char **);
-  void write_header(bigint);
+  virtual void write_header(bigint);
   int count();
   void pack(tagint *);
   int convert_string(int, double *);
-  void write_data(int, double *);
+  virtual void write_data(int, double *);
 
   void parse_fields(int, char **);
-  int add_compute(char *);
-  int add_fix(char *);
+  int add_compute(const char *);
+  int add_fix(const char *);
 
   typedef void (DumpLocal::*FnPtrWrite)(int, double *);
   FnPtrWrite write_choice;             // ptr to write data functions

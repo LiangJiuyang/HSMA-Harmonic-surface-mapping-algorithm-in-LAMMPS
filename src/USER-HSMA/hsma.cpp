@@ -55,15 +55,15 @@ HSMA::HSMA(LAMMPS *lmp) : KSpace(lmp)
 void HSMA::settings(int narg, char **arg)
 {
   if (narg != 8) error->all(FLERR,"Illegal kspace_style FMM command");
-  tolerance = fabs(force->numeric(FLERR,arg[0]));
+  tolerance = fabs(utils::numeric(FLERR,arg[0],false,lmp));
 
-  Lambda = force->numeric(FLERR, arg[1]);
-  p = force->numeric(FLERR, arg[2]);
-  Nw = force->numeric(FLERR, arg[3]);
-  Fp = force->numeric(FLERR, arg[4]);
-  F = force->numeric(FLERR, arg[5]);
-  IF_FMM_RightTerm = force->numeric(FLERR, arg[6]);
-  IF_FMM_FinalPotential = force->numeric(FLERR, arg[7]);
+  Lambda = utils::numeric(FLERR, arg[1], false, lmp);
+  p = utils::numeric(FLERR, arg[2], false, lmp);
+  Nw = utils::numeric(FLERR, arg[3], false, lmp);
+  Fp = utils::numeric(FLERR, arg[4], false, lmp);
+  F = utils::numeric(FLERR, arg[5], false, lmp);
+  IF_FMM_RightTerm = utils::numeric(FLERR, arg[6], false, lmp);
+  IF_FMM_FinalPotential = utils::numeric(FLERR, arg[7], false, lmp);
 
   Step = 0;
   Time = new float[2000];

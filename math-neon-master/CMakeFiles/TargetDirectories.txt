@@ -1,4 +1,0 @@
-/lustre/home/acct-matxzl/matxzl/jiuyang/InvAug/math-neon-master/CMakeFiles/rebuild_cache.dir
-/lustre/home/acct-matxzl/matxzl/jiuyang/InvAug/math-neon-master/CMakeFiles/edit_cache.dir
-/lustre/home/acct-matxzl/matxzl/jiuyang/InvAug/math-neon-master/CMakeFiles/math_debug.dir
-/lustre/home/acct-matxzl/matxzl/jiuyang/InvAug/math-neon-master/CMakeFiles/math_neon.dir

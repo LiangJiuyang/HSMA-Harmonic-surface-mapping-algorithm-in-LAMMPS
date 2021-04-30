@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -207,6 +207,6 @@ Self-explanatory.
 
 E: Maxit exceeded in secant solver
 
-The maximum number of interations was exceeded in the secant solver
+The maximum number of iterations was exceeded in the secant solver
 
 */

@@ -1,1 +1,0 @@
-gcc -std=gnu99  -rdynamic CMakeFiles/math_debug.dir/math_debug.c.o  -o math_debug   -L/lustre/home/acct-matxzl/matxzl/jiuyang/InvAug/math-neon-master  -Wl,-rpath,/lustre/home/acct-matxzl/matxzl/jiuyang/InvAug/math-neon-master libmath_neon.so -lm 

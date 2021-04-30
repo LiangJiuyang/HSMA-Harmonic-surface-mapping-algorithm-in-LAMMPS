@@ -1,6 +1,6 @@
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   http://lammps.sandia.gov, Sandia National Laboratories
+   https://lammps.sandia.gov/, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
@@ -38,12 +38,12 @@ class FixRigidSmall : public Fix {
   virtual void final_integrate();
   void initial_integrate_respa(int, int, int);
   void final_integrate_respa(int, int);
-  void write_restart_file(char *);
+  void write_restart_file(const char *);
 
   void grow_arrays(int);
   void copy_arrays(int, int, int);
   void set_arrays(int);
-  void set_molecule(int, tagint, int, double *, double *, double *);
+  virtual void set_molecule(int, tagint, int, double *, double *, double *);
 
   int pack_exchange(int, double *);
   int unpack_exchange(int, double *);
@@ -72,7 +72,6 @@ class FixRigidSmall : public Fix {
   double dtv,dtf,dtq;
   double *step_respa;
   int triclinic;
-  double MINUSPI,TWOPI;
 
   char *inpfile;             // file to read rigid body attributes from
   int setupflag;            // 1 if body properties are setup, else 0
@@ -129,9 +128,6 @@ class FixRigidSmall : public Fix {
   int dorientflag;      // 1 if particles store dipole orientation
   int reinitflag;       // 1 if re-initialize rigid bodies between runs
 
-  int POINT,SPHERE,ELLIPSOID,LINE,TRIANGLE,DIPOLE;   // bitmasks for eflags
-  int OMEGA,ANGMOM,TORQUE;
-
   class AtomVecEllipsoid *avec_ellipsoid;
   class AtomVecLine *avec_line;
   class AtomVecTri *avec_tri;
@@ -167,6 +163,9 @@ class FixRigidSmall : public Fix {
   int allremap;              // remap all atoms
   int dilate_group_bit;      // mask for dilation group
   char *id_dilate;           // group name to dilate
+
+  char *id_gravity;         // ID of fix gravity command to add gravity forces
+  double *gvec;             // ptr to gravity vector inside the fix
 
   double p_current[3],p_target[3];
 
