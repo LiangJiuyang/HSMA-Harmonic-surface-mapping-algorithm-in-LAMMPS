@@ -2,9 +2,9 @@
 [HSMA3D](https://aip.scitation.org/doi/10.1063/1.5044438) and [HSMA2D](https://aip.scitation.org/doi/10.1063/5.0003293) (with planar dielectric interfaces) have been implemented into LAMMPS as a k-space module. This module is written via C++ and is paralleled via MPI + OpenMP. We recommend user install 'user-omp' package in Lammps. Fewer MPIs and more OpenMPs are the most efficient choice. We suggest not to use pure MPI. With optimal choice of parameters, the speed of this package is comparable to PPPM (with Intel optimization) in LAMMPS, or even faster than it. 
 
 ## Installation
-For employing HSMA3D, the first thing is to include the USER-HSMA package in your LAMMPS:
+For employing HSMA3D, the first thing is to include the USER-HSMA package and other appropriate packages in your LAMMPS (cd ./src catalogue):
 ```
-make yes-user-hsma
+make yes-user-hsma yes-molecule yes-manybody yes-kspace
 ```
 
 We recommend to install 'USER-OMP' package for the better performance of the evaluation of the LJ potential:
@@ -12,20 +12,22 @@ We recommend to install 'USER-OMP' package for the better performance of the eva
 make yes-user-omp
 ```
 
-Then, add some commands into the `src/Makefile.package` file : 
+Then, copy following commands into the `src/Makefile.package` file (overwrite the origin file) : 
 ```
-SOURCE = $(wildcard ../src/OFile/* .o)
-PKG_INC = -DLMP_USER_OMP
-PKG_PATH = $(SOURCE) -lgfortran -lm -ldl
+# Settings for libraries used by specific LAMMPS packages
+# this file is auto-edited when those packages are included/excluded
+SOURCE = $(wildcard ../USER-HSMA/OFile/* .o)
+PKG_INC =   -DLMP_USER_OMP 
+PKG_PATH =  $(SOURCE) -lgfortran -ldl
 PKG_LIB =   
 PKG_CPP_DEPENDS = 
 PKG_LINK_DEPENDS = 
-PKG_SYSINC =  $(molfile_SYSINC) 
-PKG_SYSLIB =  $(molfile_SYSLIB) 
-PKG_SYSPATH = $(molfile_SYSPATH) 
+PKG_SYSINC =  
+PKG_SYSLIB =  
+PKG_SYSPATH = 
 ```
 
-Finally, compile the LAMMPS using
+Finally, compile the LAMMPS under ./src catalogue using
 ```
 make intel_cpu_intelmpi
 ```
@@ -33,7 +35,7 @@ make intel_cpu_intelmpi
 ## User guide
 For employing HSMA3D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
 ```
-kspace_style HSMA3D 1.0e-3 1.3 8 128 55.0 89.0 1 0
+kspace_style HSMA3D 1.0e-3 1.3 8 128 55.0 89.0 0 0
 ```
 
 The first two parameters don't need to modify. Just keep them as `"kspace_style HSMA".`
@@ -55,7 +57,7 @@ The first two parameters don't need to modify. Just keep them as `"kspace_style 
 
 For employing HSMA2D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
 ```
-kspace_style HSMA2D 1.0e-3 1.5 0.0 6 40 16 55.0 89.0 1 1
+kspace_style HSMA2D 1.0e-3 1.5 0.0 6 40 16 55.0 89.0 1 0
 ```  
 The first two parameters don't need to modify. Just keep them as `"kspace_style HSMA2D".`  
 
@@ -93,6 +95,12 @@ salt_3-1.in : 3:1 electrolyte solution
 
 SPCE_Water.spce-bulk-nvt : the SPCE water system (17496 atoms)
 ```
+
+To set the number of OpenMP threads per MPI, please type
+```
+export OMP_NUM_THREADS=10
+```
+in the command line or dynamiclly set in the code (not recommand).
 
 ## Citation
 In this package, we utilize an efficient implementation of FMM ([FMM3D](https://github.com/flatironinstitute/FMM3D)) which is developed by Greengard's group. 
