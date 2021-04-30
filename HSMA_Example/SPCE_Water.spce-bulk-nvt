@@ -24,11 +24,11 @@ thermo_modify    line one
 thermo	100
 
 #=================================================== 
-pair_style	lj/cut 10.0 
+pair_style	lj/cut/omp 10.0 
 pair_coeff	1 1 0.1556 3.166 
 pair_coeff	* 2 0.0000 0.0000  	
 
-kspace_style HSMA 1.0e-4 1.3 8 128 55.0 89.0 0 1 
+kspace_style HSMA 1.0e-4 1.3 8 128 55.0 89.0 0 0 
  
 neighbor        2.0 bin
 neigh_modify	delay 5 every 5 check no one 5000
