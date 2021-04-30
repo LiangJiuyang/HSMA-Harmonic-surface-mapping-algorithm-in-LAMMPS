@@ -2,7 +2,7 @@
 [HSMA3D](https://aip.scitation.org/doi/10.1063/1.5044438) and [HSMA2D](https://aip.scitation.org/doi/10.1063/5.0003293) (with planar dielectric interfaces) have been implemented into LAMMPS as a k-space module. This module is written via C++ and is paralleled via MPI + OpenMP. We recommend user install 'user-omp' package in Lammps. Fewer MPIs and more OpenMPs are the most efficient choice. We suggest not to use pure MPI. With optimal choice of parameters, the speed of this package is comparable to PPPM (with Intel optimization) in LAMMPS, or even faster than it. 
 
 ## Installation
-For employing HSMA3D, the first thing is to include the USER-HSMA package and other appropriate packages in your LAMMPS (cd ./src catalogue):
+For employing HSMA3D after download this full package, the first thing is to include the USER-HSMA package and other appropriate packages in your LAMMPS (cd ./src catalogue):
 ```
 make yes-user-hsma yes-molecule yes-manybody yes-kspace
 ```
@@ -31,6 +31,8 @@ Finally, compile the LAMMPS under ./src catalogue using
 ```
 make intel_cpu_intelmpi
 ```
+
+Note that if you want to use HSMA with your own LAMMPS, please just copy /src/USER-HSMA to your lammps/src catalogue, and then refer to the same installation procedure listed in this part.
 
 ## User guide
 For employing HSMA3D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
@@ -101,6 +103,12 @@ To set the number of OpenMP threads per MPI, please type
 export OMP_NUM_THREADS=10
 ```
 in the command line or dynamiclly set in the code (not recommand).
+
+To run the input script, an example is cd ./HSMA_Example and then type
+```
+srun --mpi=pmi2 ../src/lmp_intel_cpu_intelmpi -i salt_3-1.in
+```
+in the command line and hit Enter.
 
 ## Citation
 In this package, we utilize an efficient implementation of FMM ([FMM3D](https://github.com/flatironinstitute/FMM3D)) which is developed by Greengard's group. 
