@@ -10,14 +10,19 @@
 
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+   Contributing author: Jiuyang Liang (liangjiuyang@sjtu.edu.cn)
+------------------------------------------------------------------------- */
+
 #ifdef KSPACE_CLASS
 
-KSpaceStyle(HSMA,HSMA)
+KSpaceStyle(HSMA3D,HSMA3D)
 
 #else
 
-#ifndef LMP_HSMA_H
-#define LMP_HSMA_H
+#ifndef LMP_HSMA3D_H
+#define LMP_HSMA3D_H
 
 #include "kspace.h"
 
@@ -36,9 +41,9 @@ extern "C" {  void lfmm3d_s_c_g_(double *eps, int *nsource, double *source, doub
 
 namespace LAMMPS_NS {
 
-class HSMA : public KSpace {
+class HSMA3D : public KSpace {
 public:
-  HSMA(class LAMMPS *);
+  HSMA3D(class LAMMPS *);
   void settings(int, char **);
   void setup() {}
   void compute(int, int);
@@ -78,8 +83,7 @@ public:
   double **Fibonacci;
   double ** QRD, ** QLocalRD;
   int Np;
-  int maxatom;//总的粒子数
-  //double** AllSource,*AllQ;
+  int maxatom;
 
   double tolerance;
   int Step;

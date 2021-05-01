@@ -10,17 +10,23 @@
 
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+   Contributing author: Jiuyang Liang (liangjiuyang@sjtu.edu.cn)
+------------------------------------------------------------------------- */
+
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include "atom.h"
 #include "comm.h"
-#include "domain.h"
+#include "domain.h" 
 #include "force.h"
 #include "memory.h"
 #include "error.h"
 #include "math.h"
-#include "hsma.h"
+#include "update.h"
+#include "hsma3d.h"
 #include<iostream>
 #include <sstream>
 #include <fstream>
@@ -28,17 +34,17 @@
 #include<omp.h>
 #include<iomanip>
 #include <immintrin.h> 
-
 #include "complex.h"
 
 extern "C" {void lfmm3d_t_c_g_(double *eps, int *nsource,double *source, double *charge, int *nt, double *targ, double *pottarg, double *gradtarg, int *ier);}
-
+extern int fab(int n);
+extern int isfab(int m);
 
 using namespace LAMMPS_NS; 
 using namespace std;
 
 /* ---------------------------------------------------------------------- */
-HSMA::HSMA(LAMMPS *lmp) : KSpace(lmp)
+HSMA3D::HSMA3D(LAMMPS *lmp) : KSpace(lmp)
 {
   maxatom = atom->natoms;
   MPI_Comm_rank(world, &me);
@@ -47,16 +53,13 @@ HSMA::HSMA(LAMMPS *lmp) : KSpace(lmp)
   Ly = domain->yprd;
   Lz = domain->zprd * slab_volfactor;
   pi = 3.141592653589793;
-
-  //ewaldflag = 1;
 }
 
 /* ---------------------------------------------------------------------- */
-void HSMA::settings(int narg, char **arg)
+void HSMA3D::settings(int narg, char **arg)
 {
   if (narg != 8) error->all(FLERR,"Illegal kspace_style FMM command");
   tolerance = fabs(utils::numeric(FLERR,arg[0],false,lmp));
-
   Lambda = utils::numeric(FLERR, arg[1], false, lmp);
   p = utils::numeric(FLERR, arg[2], false, lmp);
   Nw = utils::numeric(FLERR, arg[3], false, lmp);
@@ -64,19 +67,47 @@ void HSMA::settings(int narg, char **arg)
   F = utils::numeric(FLERR, arg[5], false, lmp);
   IF_FMM_RightTerm = utils::numeric(FLERR, arg[6], false, lmp);
   IF_FMM_FinalPotential = utils::numeric(FLERR, arg[7], false, lmp);
-
   Step = 0;
   Time = new float[2000];
+
+  if(Lambda<0)
+	  error->all(FLERR, "Lambda shoule be >0.");
+  if (Lambda > 20 || Lambda < 0.2) {
+	  error->warning(FLERR, fmt::format("The Lambda is too big/small! Please use an approximate range of Lambda. Set Lambda to the default value.",
+		  update->ntimestep));
+	  Lambda = 1.3;
+  }
+  if (p<1)
+	  error->all(FLERR, "p shoule be >=1.");
+  if (p > 50){
+	  error->warning(FLERR, fmt::format("The p is too big! Please use a smaller p. Set p to the default value.",
+		  update->ntimestep));
+	  p = 8;
+  }
+  if((IF_FMM_RightTerm)!=0&& (IF_FMM_RightTerm!=1))
+	  error->all(FLERR, "Using wrong value of IF_FMM_RightTerm.");
+  if ((IF_FMM_FinalPotential) != 0 && (IF_FMM_FinalPotential != 1))
+	  error->all(FLERR, "Using wrong value of IF_FMM_FinalPotential.");
+  if (Fp > F || Fp < 0 || F < 0 || isfab(int(Fp)) != 1 || isfab(int(F)) != 1) {
+	  error->warning(FLERR, fmt::format("Using wrong value of Fp and F. Set Fp and F to the default value.",
+		  update->ntimestep));
+	  Fp = 89.0;
+	  F = 144.0;
+  }
+  if (Nw <= p * p)
+  {
+	  error->warning(FLERR, fmt::format("Nw is too small! Set Nw to the default value.",
+		  update->ntimestep));
+	  Nw = int(2 * p * p);
+  }
+  if (domain->dimension == 2)
+	  error->all(FLERR, "Cannot use HSMA3D in a 2d simulation. Please use HSMA2D instead.");
+
 }
 
-void HSMA::init()
+void HSMA3D::init()
 {
-  printf("Setting up FMM implemented by Greengard (Release 1.0.0)\n");
-
-  //设置测试点的位置
-  //double srun1[Nw][3],srun2[Nw][3];
-  //PointSum = srun1;
-  //QuizSum = srun2;
+  printf("Setting up HSMA implemented by Jiuyang Liang (Release 1.0.0)\n");
   
   PointSum = new double * [Nw];
   QuizSum = new double * [Nw];
@@ -122,7 +153,6 @@ void HSMA::init()
 	  }
   }
 
-  //计算测试点的局部展开基
   A = new double* [Nw];
   PointSumMultipleExpansionMatrix = new double[p * p];
   QuizSumMultipleExpansionMatrix = new double[p * p];
@@ -178,7 +208,7 @@ void HSMA::init()
   cout << Lx << "=Lx   " << Ly << "=Ly    " << Lz << "=Lz   " << Lambda << "=Lambda    " << p << "=p   " << Nw << "=Nw    "  << Fp << "=Fp   " << F << "=F   " << IF_FMM_RightTerm << "=IF_FMM_RightTerm   " << IF_FMM_FinalPotential << "=IF_FMM_FinalPotential   " << endl;
 }
 
-void HSMA::compute(int eflag, int vflag)
+void HSMA3D::compute(int eflag, int vflag)
 {
 	// set energy/virial flags
 	ev_init(eflag, vflag);
@@ -190,7 +220,7 @@ void HSMA::compute(int eflag, int vflag)
 	// return if there are no charges
 	if (qsqsum == 0.0) return;
 
-  //设置粒子数 坐标 带电量 力的接口	
+  //Set interfaces
   double **x = atom->x;
   double *q = atom->q;
   int nlocal = atom->nlocal;
@@ -204,9 +234,6 @@ void HSMA::compute(int eflag, int vflag)
 
   if (RankID == 1)
   {
-	  //double time;
-	  //time = MPI_Wtime();
-
 	  double X[nlocal][3], Q[nlocal], Force[nlocal][3], Pot[nlocal];
 	  for (int i = 0; i < nlocal; i++)
 	  {
@@ -221,43 +248,24 @@ void HSMA::compute(int eflag, int vflag)
 	  }
 	  AdjustParticle_Double(X, nlocal, Lx, Ly, Lz);
 
-	  //time = MPI_Wtime() - time;
-	  //if (me == 0)cout << "Time for Final 0 is " << time * 1000 << endl;
-	  //time = MPI_Wtime();
-
-	  //Find the image charge(这里每个核只存储局部的镜像)
+	  //Find the image charge
 	  int lx = ceil((Rs - Lx / 2) / Lx), ly = ceil((Rs - Ly / 2) / Ly), lz = ceil((Rs - Lz / 2) / Lz);
-	  int TotalNumber = ceil(nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//减少存储量消耗
+	  int TotalNumber = ceil(nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);
 	  double ImageCharge[TotalNumber][4];
 	  int ImageNumber;
 	  SetImageCharge(ImageCharge, &ImageNumber, (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1), X, Q, nlocal, Rs, Lx, Ly, Lz, lx, ly, lz);
-
-	  //time = MPI_Wtime() - time;
-	  //if (me == 0)cout << "Time for Final I is " << time * 1000 << endl;
-	  //time = MPI_Wtime();
 
 	  //Calculate near field potential which contains all the contributions in the cut-off sphere B at the monitoring points
 	  double Near[Nw];
 	  CalculateNearFieldAndZD_Single(Near, ImageCharge, ImageNumber, Nw, IF_FMM_RightTerm, Lx, Ly, Lz, PointSum, QuizSum, X, Force, Pot, nlocal, Q,tolerance);
 
-	  //time = MPI_Wtime() - time;
-	  //if (me == 0)cout << "Time for Final II is " << time * 1000 << endl;
-	  //time = MPI_Wtime();
-
 	  //Solve The Least Square Problem
 	  double C[p * p];
 	  SolveLeastSquareProblem(C, A, Near, p, Nw);
 
-	  //time = MPI_Wtime() - time;
-	  //if (me == 0)cout << "Time for Final III is " << time * 1000 << endl;
-	  //time = MPI_Wtime();
-
 	  //Compute final force, potential and energy
 	  double Energy_HSMA;
 	  Energy_HSMA = FinalCalculateEnergyAndForce_Single(Force, Pot, X, Q, nlocal, ImageCharge, ImageNumber, Fibonacci, (double**)QRD, (double**)QLocalRD, C, p, Fp, F, Rs, pi, IF_FMM_FinalPotential,tolerance);
-
-	  //time = MPI_Wtime() - time;
-	  //if (me == 0)cout << "Time for Final IV is " << time*1000 << endl;
 
 	  scale = 1.0;
 	  const double qscale = qqrd2e * scale;
@@ -272,7 +280,6 @@ void HSMA::compute(int eflag, int vflag)
 
 	  if (eflag_global) {
 		  energy += Energy_HSMA * qscale / 2;
-		  //energy += Energy_HSMA * qscale; 
 	  }
 
 	  if (evflag_atom) {
@@ -282,137 +289,14 @@ void HSMA::compute(int eflag, int vflag)
 				  eatom[i] *= qscale;
 			  }
 		  }
-
 		  if (vflag_atom)
 			  for (int i = 0; i < nlocal; i++)
 				  for (int j = 0; j < 6; j++) vatom[i][j] *= q[i] * qscale;
 	  }
-
-
-          if(vflag_global)
-		  {
-			  /*
-			  double virial_old[6] = {0.00,0.00,0.00,0.00,0.00,0.00};
-              #pragma omp parallel for
-              for(int i=0;i<nlocal;i++)
-			      {
-				    double a = 0.00, b = 0.00, c = 0.00, d=0.00, e=0.00,f=0.00;
-					for (int j = 0; j < ImageNumber; j++)
-						{
-							double deltax = ImageCharge[j][0] - X[i][0];
-							double deltay = ImageCharge[j][1] - X[i][1];
-							double deltaz = ImageCharge[j][2] - X[i][2];
-							double delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
-
-							if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
-							{
-								a = a + ImageCharge[j][3] * (deltax) / (delta * delta);
-								b = b + ImageCharge[j][3] * (deltay) / (delta * delta);
-								c = c + ImageCharge[j][3] * (deltaz) / (delta * delta);
-							}
-						}
-
-						virial_old[0] = virial_old[0] - a * Q[i] * qscale;
-						virial_old[1] = virial_old[1] - b * Q[i] * qscale;
-						virial_old[2] = virial_old[2] - c * Q[i] * qscale;
-*/
-				    /*
-					virial_old[0] = 10;
-					virial_old[1] = 20;
-					virial_old[2] = 60;
-					virial_old[3] = 1.5;
-					virial_old[4] = 2.5;
-					virial_old[5] = 3.5;
-					*/
-				  /*
-				      virial_old[0] = virial_old[0] + Force[i][0] * qscale * x[i][0];
-					  virial_old[1] = virial_old[1] + Force[i][1] * qscale * x[i][1];
-					  virial_old[2] = virial_old[2] + Force[i][2] * qscale * x[i][2];
-					  virial_old[3] = virial_old[3] + Force[i][1] * qscale * x[i][0];
-					  virial_old[4] = virial_old[4] + Force[i][2] * qscale * x[i][0];
-					  virial_old[5] = virial_old[5] + Force[i][2] * qscale * x[i][1]; 
-					*/  
-					  
-				    /*
-					virial_old[0] = virial_old[0]-q[i] * Force[i][0] * qscale *x[i][0]/2+ Force[i][0] * qscale * x[i][0];
-					virial_old[1] = virial_old[1]-q[i] * Force[i][1] * qscale *x[i][1]/2+ Force[i][1] * qscale * x[i][1];
-					virial_old[2] = virial_old[2]-q[i] * Force[i][2] * qscale *x[i][2]/2+ Force[i][2] * qscale * x[i][2];
-					virial_old[3] = virial_old[3]-q[i] * Force[i][1] * qscale *x[i][0]/2+ Force[i][1] * qscale * x[i][0];
-					virial_old[4] = virial_old[4]-q[i] * Force[i][2] * qscale *x[i][0]/2+ Force[i][2] * qscale * x[i][0];
-					virial_old[5] = virial_old[5]-q[i] * Force[i][2] * qscale *x[i][1]/2+ Force[i][2] * qscale * x[i][1];
-					*/
-				  }
-		  /*
-			  for (int i = 0; i < nlocal; i++)
-			  {
-
-				  f[i][0] = 0;
-				  f[i][1] = 0;
-				  f[i][2] = 0; 
-			  }
-
-			  double EF[int(2*F+2)];
-			  double CenterPara;
-
-			  //#pragma omp parallel for
-			  for (int i = 0; i < int(2 * F + 2); i++)
-			  {
-				  CenterPara = 0.00;
-				  for (int j = 0; j < p * p; j++)
-				  {
-					  CenterPara = CenterPara + (1 / (4 * pi)) * (QRD[i][j] - QLocalRD[i][j]) * C[j];
-				  }
-				  EF[i] = CenterPara * Fibonacci[i][3];
-			  }
-
-              #pragma omp parallel for
-			  for (int i = 0; i < nlocal; i++)
-			  {
-				  double a = 0.00, b = 0.00, c = 0.00, d = 0.00, e = 0.00, f = 0.00;
-				  for (int j = 0; j < int(2 * F + 2); j++)
-				  {
-					  double deltax = Fibonacci[j][0] - X[i][0];
-					  double deltay = Fibonacci[j][1] - X[i][1];
-					  double deltaz = Fibonacci[j][2] - X[i][2];
-					  double delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
-
-				    a = a + EF[j] * (deltax) / (delta * delta);
-				    b = b + EF[j] * (deltay) / (delta * delta);
-					c = c + EF[j] * (deltaz) / (delta * delta);
-				  }
-
-				  virial_old[0] = virial_old[0] - a * Q[i] * qscale;
-				  virial_old[1] = virial_old[1] - b * Q[i] * qscale;
-				  virial_old[2] = virial_old[2] - c * Q[i] * qscale;
-			  }
-			  //double virial_all[6]; 
-              //MPI_Allreduce(virial_old,virial_all,6,MPI_DOUBLE,MPI_SUM,world);
-              for (int i = 0; i < 6; i++) 
-                  {
-				         //cout<<virial[i]<<endl; 
-                     virial[i] += virial_old[i]/2;
-                  }
-					
-          }
-          */
-
-	  //time = MPI_Wtime() - time;
-	  //if (me == 0)cout << "Time for K-space is " << time*1000 << endl;
-
-	  if (me == 0) {
-                   
-          //cout << "The virial of particle 0 are" << virial[0] << "   " << virial[1] << "   " << virial[2] <<"   " << virial[3] << "   " << virial[4]<<"   " << virial[5] << endl;
-		  //cout << "The forces of particle 0 are" << f[0][0] << "   " << f[0][1] << "   " << f[0][2] << endl;
-		  //cout << "The Pot of particle 0 are" << Pot[0] << endl;
-		  //cout << "The Energy is " << energy << "      " << Energy_HSMA / maxatom << endl;
-	  }
-
   }
   else if (RankID > 1) {
 
 	  double AllSource[maxatom][3], AllQ[maxatom];
-
-	  //收集全部粒子的信息
 	  int nlocal_All[RankID], nlocal_All_Q[RankID];
 	  MPI_Allgather(&nlocal, 1, MPI_INT, nlocal_All, 1, MPI_INT, world);
 	  int Size_All[RankID], Size_All_Q[RankID];
@@ -440,39 +324,24 @@ void HSMA::compute(int eflag, int vflag)
 		  X[i][0] = x[i][0] - (boxhi[0] - Lx / 2);
 		  X[i][1] = x[i][1] - (boxhi[1] - Ly / 2);
 		  X[i][2] = x[i][2] - (boxhi[2] - Lz / 2);
-		  //if (fabs(X[i][0]) > Lx / 2 || fabs(X[i][1]) > Ly / 2 || fabs(X[i][2]) > Lz / 2) 
-			  //cout << "The exceeding point ID is " << i << endl;
 		  Q[i] = q[i];
 	  }
 
-	  //cout << "   "<< X[48920][0] <<"   "<< X[48920][1] <<"    " << X[48920][2] << endl;
-
 	  AdjustParticle_Double(X, nlocal, Lx, Ly, Lz);
-
-	  //cout << "   " << X[48920][0] << "   " << X[48920][1] << "    " << X[48920][2] << endl;
-
-	  //double time;
-	  //time = MPI_Wtime();  
 
 	  MPI_Iallgatherv((double*)X, nlocal * 3, MPI_DOUBLE, (double*)AllSource, nlocal_All, Size_All, MPI_DOUBLE, world, &request);
 	  MPI_Iallgatherv((double*)Q, nlocal, MPI_DOUBLE, (double*)AllQ, nlocal_All_Q, Size_All_Q, MPI_DOUBLE, world, &request_Q);
 
-	  //Find the image charge(这里每个核只存储局部的镜像)
+	  //Find the image charge
 	  int lx = ceil((Rs - Lx / 2) / Lx), ly = ceil((Rs - Ly / 2) / Ly), lz = ceil((Rs - Lz / 2) / Lz);
-	  int TotalNumber = ceil(nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//减少存储量消耗
+	  int TotalNumber = ceil(nlocal * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);
 	  double ImageCharge[TotalNumber][4];
 	  int ImageNumber;
 	  SetImageCharge(ImageCharge, &ImageNumber, (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1), X, Q, nlocal, Rs, Lx, Ly, Lz, lx, ly, lz);
 
 	  //Calculate near field potential which contains all the contributions in the cut-off sphere B at the monitoring points
 	  double Near[Nw], Near_All[Nw];
-	  //double PointSum_New[Nw][3], QuizSum_New[Nw][3];
-	  //for (int i = 0; i < Nw; i++)
-		  //for (int j = 0; j < 3; j++)
-		  //{
-			//  PointSum_New[i][j] = PointSum[i][j];
-			// QuizSum_New[i][j] = QuizSum[i][j];
-		  //}
+
 	  //CalculateNearFieldAndZD(Near, ImageCharge, ImageNumber, Nw, IF_FMM_RightTerm, Lx, Ly, Lz, PointSum_New, QuizSum_New);
 	  CalculateNearFieldAndZD(Near, ImageCharge, ImageNumber, Nw, IF_FMM_RightTerm, Lx, Ly, Lz, PointSum, QuizSum,tolerance);
 	  MPI_Reduce(Near, Near_All, Nw, MPI_DOUBLE, MPI_SUM, 0, world);
@@ -480,71 +349,21 @@ void HSMA::compute(int eflag, int vflag)
 	  //Solve The Least Square Problem
 	  double C[p * p];
 	  if (me == 0) { SolveLeastSquareProblem(C, A, Near_All, p, Nw); }
-	  //double C[p * p], A_New[Nw][p * p - 1];
-	  //for (int i = 0; i < Nw; i++)
-		//  for (int j = 0; j < p * p - 1; j++)
-			//  A_New[i][j] = A[i][j];
-	  //if (me == 0) { SolveLeastSquareProblem(C, (double**)A_New, Near_All, p, Nw); }
 	  MPI_Bcast(C, p * p, MPI_DOUBLE, 0, world);
-
 	  MPI_Wait(&request, &status);
 	  MPI_Wait(&request_Q, &status);
 
-	  //time = MPI_Wtime() - time;
-	  //if (me == 0)cout << "Time for gatherv is " << time << endl;
-	  //time = MPI_Wtime();
-
 	  //Compute final force, potential and energy
-
 	  double Energy_HSMA;
 	  double Force[nlocal][3], Pot[nlocal];
 	  TotalNumber = ceil(maxatom * (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1) / 2);//减少存储量消耗
 	  double ImageCharge_All[TotalNumber][4];
 	  SetImageCharge(ImageCharge_All, &ImageNumber, (2 * lx + 1) * (2 * ly + 1) * (2 * lz + 1), AllSource, AllQ, maxatom, Rs, Lx, Ly, Lz, lx, ly, lz);
 
-	  //double Fibonacci_New[Np][4];
-	  //for (int i = 0; i < Np; i++)
-		  //for (int j = 0; j < 4; j++)
-			  //Fibonacci_New[i][j] = Fibonacci[i][j];
-
-	  //Energy_HSMA = FinalCalculateEnergyAndForce(Force, Pot, X, Q, nlocal, ImageCharge_All, ImageNumber, Fibonacci_New, (double**)QRD, (double**)QLocalRD, C, p, Fp, F, Rs, pi, IF_FMM_FinalPotential);
 	  Energy_HSMA = FinalCalculateEnergyAndForce(Force, Pot, X, Q, nlocal, ImageCharge_All, ImageNumber, Fibonacci, (double**)QRD, (double**)QLocalRD, C, p, Fp, F, Rs, pi, IF_FMM_FinalPotential,tolerance);
-
-	  //double Energy_HSMA;
-	  //double Force_All[maxatom][3], Pot_All[maxatom];
-	  //Energy_HSMA = FinalCalculateEnergyAndForce(Force_All, Pot_All, AllSource, AllQ, maxatom, ImageCharge, ImageNumber, Fibonacci, (double**)QRD, (double**)QLocalRD, C, p, Fp, F, Rs, pi, IF_FMM_FinalPotential);
-	  //double Force[nlocal][3],Pot[nlocal];
-	  //MPI_Reduce_scatter((double *)Force_All,(double *)Force, nlocal_All, MPI_DOUBLE, MPI_SUM,world);
-	  //MPI_Reduce_scatter((double*)Pot_All, (double*)Pot, nlocal_All_Q, MPI_DOUBLE, MPI_SUM, world);
-
-	  //time = MPI_Wtime() - time;
-	  //if (me == 0)cout << "Time for Final is " << time << endl;
 
 	  scale = 1.0;
 	  const double qscale = qqrd2e * scale;
-
-	  if (me == 0) {
-		  //cout << "The forces of particle 0 are" << f[0][0] << "   " << f[0][1] << "   " << f[0][2] << endl;
-		  //cout << "The forces of particle 1 are" << f[1][0] << "   " << f[1][1] << "   " << f[1][2] << endl;
-		  //cout << "The forces of particle 2 are" << f[2][0] << "   " << f[2][1] << "   " << f[2][2] << endl;
-		  //cout << "The forces of particle 3 are" << f[3][0] << "   " << f[3][1] << "   " << f[3][2] << endl;
-		  //cout << "The forces of particle 4 are" << f[4][0] << "   " << f[4][1] << "   " << f[4][2] << endl;
-		  //cout << "The forces of particle 5 are" << f[5][0] << "   " << f[5][1] << "   " << f[5][2] << endl;
-		  //cout << "The forces of particle 6 are" << f[6][0] << "   " << f[6][1] << "   " << f[6][2] << endl;
-		  //cout << "The forces of particle 7 are" << f[7][0] << "   " << f[7][1] << "   " << f[7][2] << endl;
-		  //cout << C[0] << "   " << C[1] << "    " << C[2] << endl;
-		  //cout << PointSum[10][0] << "   " << PointSum[10][1] << "    " << PointSum[10][2] << endl;
-		  //cout << QuizSum[10][0] << "   " << QuizSum[10][1] << "    " << QuizSum[10][2] << endl;
-		  //cout << Near[0] << "   " << Near[1] << "    " << Near[2] << endl;
-		  //cout << Near_All[0] << "   " << Near_All[1] << "    " << Near_All[2] << endl;
-		  //cout << x[0][0] << "   " << x[0][1] << "   " << x[0][2] << endl;
-		  //cout << Force[0][0] << "   " << Force[0][1] << "   " << Force[0][2] << endl;
-		  //cout << Force[10000][0] << "   " << Force[10000][1] << "   " << Force[10000][2] << endl;
-		  //cout <<"The potentials of particle 0 1 2 are  "<< Pot[0] << "   " << Pot[1] << "   " << Pot[2] << endl;
-		  //cout << Pot[10] << "   " << Pot[11] << "   " << Pot[12] << endl;
-		  //cout << "The forces of particle 0 are  " << f[0][0] << "   " << f[0][1] << "   " << f[0][2] << endl;
-		  //cout << "The forces of particle 48920 are  " << f[48920][0] << "   " << f[48920][1] << "   " << f[48920][2] << endl;
-	  }
 
 	  //Assemble results
 	  for (int i = 0; i < nlocal; i++)
@@ -556,11 +375,11 @@ void HSMA::compute(int eflag, int vflag)
 
 	  double Energy_HSMA_All;
 	  MPI_Allreduce(&Energy_HSMA, &Energy_HSMA_All, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	  //energy += Energy_HSMA_All * qscale;
+
 	  if (eflag_global) {
 		  energy += Energy_HSMA_All * qscale / 2;
-		  //energy += Energy_HSMA * qscale; 
 	  }
+
 	  if (evflag_atom) {
 		  if (eflag_atom) {
 			  for (int i = 0; i < nlocal; i++) {
@@ -568,56 +387,14 @@ void HSMA::compute(int eflag, int vflag)
 				  eatom[i] *= qscale;
 			  }
 		  }
-
 		  if (vflag_atom)
 			  for (int i = 0; i < nlocal; i++)
 				  for (int j = 0; j < 6; j++) vatom[i][j] *= q[i] * qscale;
 	  }
-		
-          if(vflag_global)
-		{ /*
-                     for(int i=0;i<nlocal;i++)
-			{
-   				virial[0]+=Force[i][0] * qscale *x[i][0];
-                                virial[1]+=Force[i][1] * qscale *x[i][1];
-				virial[2]+=Force[i][2] * qscale *x[i][2];
-				virial[3]+=Force[i][1] * qscale *x[i][0];
-				virial[4]+=Force[i][2] * qscale *x[i][0];
-				virial[5]+=Force[i][2] * qscale *x[i][1];
-			}
-                   */
-                }
-
-	  if (me == 0) {
-		  //cout << C[0] << "   " << C[1] << "    " << C[2] << endl;
-		  //cout << PointSum[10][0] << "   " << PointSum[10][1] << "    " << PointSum[10][2] << endl;
-		  //cout << QuizSum[10][0] << "   " << QuizSum[10][1] << "    " << QuizSum[10][2] << endl;
-		  //cout << Near[0] << "   " << Near[1] << "    " << Near[2] << endl;
-		  //cout << Near_All[0] << "   " << Near_All[1] << "    " << Near_All[2] << endl;
-		  //cout << "The forces of particle 0 are" << f[0][0] << "   " << f[0][1] << "   " << f[0][2] << endl;
-		  //cout << "The forces of particle 0 are" << Force[0][0] << "   " << Force[0][1] << "   " << Force[0][2] << endl;
-		  //cout << "The Energy is " << energy << "      " << Energy_HSMA_All * 10 / maxatom << endl;
-		  //cout << "The forces of particle 48920 are  " << f[48920][0] << "   " << f[48920][1] << "   " << f[48920][2] << endl;
-	  }
-
-  }
-  //cout << AllSource[1][1] << "   " << AllSource[1][2] << "    " << AllSource[1][0] << endl;
-  //cout << "The information of image is "<<maxatom << "   " << ImageNumber << "    " << TotalNumber << endl;
-
-  time = MPI_Wtime() - time;
-  int TotalStep = 100;
-  if (Step < TotalStep) { Time[Step] = time * 1000; }
-  Step++;
-  if (me == 0 && Step == TotalStep) {
-	  ofstream outfile;
-	  outfile.open("./Time_HSMA.txt");
-	  for (int i = 0; i < TotalStep; i++)
-		  outfile << Time[i] << endl;
-	  outfile.close();
   }
 }
 
-double HSMA::memory_usage()
+double HSMA3D::memory_usage()
 {
   double bytes = 0.0;
   bytes += maxatom * sizeof(double);
@@ -637,7 +414,7 @@ double fac(double t)//calculate factorial
 	return s;
 }
 
-void HSMA::CalculateRDMultipoleExpansion(double* Q, int p, double x, double y, double z)
+void HSMA3D::CalculateRDMultipoleExpansion(double* Q, int p, double x, double y, double z)
 {
 	Q[0] = 1.0;
 	Q[1] = y / 2;
@@ -697,7 +474,7 @@ void HSMA::CalculateRDMultipoleExpansion(double* Q, int p, double x, double y, d
 	}
 }
 
-void HSMA::CalculateLocalRDMultipoleExpansion(double* Q, int p, double x, double y, double z, double Rs)
+void HSMA3D::CalculateLocalRDMultipoleExpansion(double* Q, int p, double x, double y, double z, double Rs)
 {
 	Q[0] = 1.0;
 	Q[1] = y / 2;
@@ -757,7 +534,7 @@ void HSMA::CalculateLocalRDMultipoleExpansion(double* Q, int p, double x, double
 	}
 }
 
-void HSMA::CalculateMultipoleExpansion(double* Q, int p, double x, double y, double z)
+void HSMA3D::CalculateMultipoleExpansion(double* Q, int p, double x, double y, double z)
 {
 	Q[0] = 1.0;
 	Q[1] = y / 2;
@@ -805,9 +582,8 @@ void HSMA::CalculateMultipoleExpansion(double* Q, int p, double x, double y, dou
 	}
 }
 
-void HSMA::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
+void HSMA3D::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
 {
-	/*         先计算不求导的 开始          */
 	double Qold[p * p];
 	Qold[0] = 1.0;
 	Qold[1] = y / 2;
@@ -841,8 +617,6 @@ void HSMA::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, do
 		}
 	}
 
-
-	/*         计算不求导的 结束                       */
 	Q[0] = 0.00;
 	Q[1] = 0.00;
 	Q[2] = -1.0;
@@ -888,9 +662,8 @@ void HSMA::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, do
 
 }
 
-void HSMA::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
+void HSMA3D::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
 {
-	/*         先?扑悴磺蟮?的 开?          */
 	double Qold[p * p];
 	Qold[0] = 1.0;
 	Qold[1] = y / 2;
@@ -923,9 +696,6 @@ void HSMA::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y, d
 			t++;
 		}
 	}
-
-
-	//开?求?部分
 	Q[0] = 0.00;
 	Q[1] = 0.00;
 	Q[2] = 0.0;
@@ -971,9 +741,8 @@ void HSMA::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y, d
 	}
 }
 
-void HSMA::CalculateYDMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
+void HSMA3D::CalculateYDMultipoleExpansion(double* Q, int p, double x, double y, double z)//Q is a p*p vector.  Set multi-pole expansion coefficient
 {
-	/*         先?扑悴磺蟮?的 开?          */
 	double Qold[p * p];
 	Qold[0] = 1.0;
 	Qold[1] = y / 2;
@@ -1006,9 +775,6 @@ void HSMA::CalculateYDMultipoleExpansion(double* Q, int p, double x, double y, d
 			t++;
 		}
 	}
-
-	/*         ?扑悴磺蟮?的 ?崾?                      */
-		//开?求?部分
 
 	Q[0] = 0.00;
 	Q[1] = 1.0 / 2.0;
@@ -1055,7 +821,7 @@ void HSMA::CalculateYDMultipoleExpansion(double* Q, int p, double x, double y, d
 	}
 }
 
-void HSMA::SetFibonacci(double Fibonacci[][4], double F, double Fp, int Np, double Rs, double PI)
+void HSMA3D::SetFibonacci(double Fibonacci[][4], double F, double Fp, int Np, double Rs, double PI)
 {
 	double zz, zt, zs, phia, phib;
 	double deltaz = 2.0 / F;
@@ -1078,7 +844,7 @@ void HSMA::SetFibonacci(double Fibonacci[][4], double F, double Fp, int Np, doub
 	}
 }
 
-void HSMA::AdjustParticle_Float(float Particle[][3], int N, float Lx, float Ly, float Lz)//Image Correction 0~Lx
+void HSMA3D::AdjustParticle_Float(float Particle[][3], int N, float Lx, float Ly, float Lz)//Image Correction 0~Lx
 {
 	for (int i = 0; i < N; i++)
 	{
@@ -1088,9 +854,7 @@ void HSMA::AdjustParticle_Float(float Particle[][3], int N, float Lx, float Ly, 
 		}
 		if (Particle[i][0] < 0.00)
 		{
-			//cout<<Particle[i].x<<"   ";
 			Particle[i][0] = Particle[i][0] + ceil(fabs(Particle[i][0] / Lx)) * Lx;
-			//cout<<Particle[i].x<<endl;
 		}
 		if (Particle[i][1] > Ly)
 		{
@@ -1111,7 +875,7 @@ void HSMA::AdjustParticle_Float(float Particle[][3], int N, float Lx, float Ly, 
 	}
 }
 
-void HSMA::AdjustParticle_Double(double Particle[][3], int N, double Lx, double Ly, double Lz)//Image Correction -Lx/2~Lx/2
+void HSMA3D::AdjustParticle_Double(double Particle[][3], int N, double Lx, double Ly, double Lz)//Image Correction -Lx/2~Lx/2
 {
 	for (int i = 0; i < N; i++)
 	{
@@ -1121,9 +885,7 @@ void HSMA::AdjustParticle_Double(double Particle[][3], int N, double Lx, double 
 		}
 		if (Particle[i][0] < -Lx / 2)
 		{
-			//cout<<Particle[i].x<<"   ";
 			Particle[i][0] = Particle[i][0] + ceil(fabs((Particle[i][0] + Lx / 2.0)/Lx)) * Lx;
-			//cout<<Particle[i].x<<endl;
 		}
 		if (Particle[i][1] > Ly/2)
 		{
@@ -1144,7 +906,7 @@ void HSMA::AdjustParticle_Double(double Particle[][3], int N, double Lx, double 
 	}
 }
 
-void HSMA::SetImageCharge(double ImageCharge[][4], int* ImageNumber, int TotalNumber, double Source[][3], double* Q, int NSource, double Rs, double Lx, double Ly, double Lz, int lx, int ly, int lz)
+void HSMA3D::SetImageCharge(double ImageCharge[][4], int* ImageNumber, int TotalNumber, double Source[][3], double* Q, int NSource, double Rs, double Lx, double Ly, double Lz, int lx, int ly, int lz)
 {
 	int total = 0;
 	int number = 0;
@@ -1178,13 +940,13 @@ void HSMA::SetImageCharge(double ImageCharge[][4], int* ImageNumber, int TotalNu
 	*ImageNumber = number;
 }
 
-void HSMA::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int ImageNumber, int Nw, int IF_FMM_RightTerm, double Lx, double Ly, double Lz, double **PointSum, double **QuizSum, double tolerance)
+void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int ImageNumber, int Nw, int IF_FMM_RightTerm, double Lx, double Ly, double Lz, double **PointSum, double **QuizSum, double tolerance)
 {
 	if (IF_FMM_RightTerm)//Using FMM to calculate pairwise sum
 	{
 		double eps = tolerance;
 
-		/*            开始 FMM 参数设置           */
+		/*            Set FMM parameters           */
 		int ns = ImageNumber;
 		int nt = Nw * 2;
 		double* source = (double*)malloc(3 * ns * sizeof(double));
@@ -1308,7 +1070,7 @@ void HSMA::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int Im
 				}
 			}
 
-            #pragma omp parallel
+			#pragma omp parallel
 			{
 				int id = omp_get_thread_num();
 				int size = omp_get_num_threads();
@@ -1327,7 +1089,7 @@ void HSMA::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int Im
 					YQ = _mm512_set1_pd(QuizSum[i][1]);
 					ZQ = _mm512_set1_pd(QuizSum[i][2]);
 					double pottarg = 0.00, pottarg1 = 0.00;
-					for (int j = 0; j < ImageNumber; j=j+8)
+					for (int j = 0; j < ImageNumber; j = j + 8)
 					{
 						X1 = _mm512_load_pd(&Image_X[j]);
 						Y1 = _mm512_load_pd(&Image_Y[j]);
@@ -1350,86 +1112,17 @@ void HSMA::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int Im
 				}
 			}
 		}
-		/*
-		double Paramet1[ImageNumber];
-		for (int i = 0; i < ImageNumber; i++)
-		{
-			Paramet1[i] = ImageCharge[i][3];
-		}
-
-		double Paramet[ImageNumber];
-		memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
-
-
-		double Image[ImageNumber][4];
-		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
-
-
-	    #pragma omp parallel shared(Near,Paramet,Image) 
-		{
-
-			double pottarg, fldtarg, pottarg2, fldtarg2;
-			double deltax, deltay, delta;
-			double deltaz;
-
-			double deltax1, deltay1, deltaz1;
-
-			double delta1;
-		    #pragma omp for 
-			for (int i0 = 0; i0 < Nw; i0 += 20)
-			{
-				//#pragma vector nontemporal
-				for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
-				{
-					pottarg = 0.00;
-					fldtarg = 0.00;
-					pottarg2 = 0.00;
-					fldtarg2 = 0.00;
-					double Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
-					for (int j = 0; j < ImageNumber; j++)
-					{
-						deltax = Copy1 - Image[j][0];
-						deltay = Copy2 - Image[j][1];
-						deltaz = Copy3 - Image[j][2];
-
-						double Para = Paramet[j];
-
-						delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
-						pottarg = pottarg + Para / delta;
-
-						//deltaz1=-lz-Image[j][2]; 
-						deltax1 = Copy4 - Image[j][0];
-						deltay1 = Copy5 - Image[j][1];
-						deltaz1 = Copy6 - Image[j][2];
-
-						delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
-						pottarg2 = pottarg2 + Para / delta1;
-					}
-
-					Near[i] = pottarg2 - pottarg;
-				}
-			}
-
-
-		}
-
-		*/
-
 	}
-
 }
 
-void HSMA::SolveLeastSquareProblem(double* C, double** A, double* Near, int p, int Nw)
+void HSMA3D::SolveLeastSquareProblem(double* C, double** A, double* Near, int p, int Nw)
 {
-
 	int rowAT, columnATA, columnAT;
 	double alpha, beta;
 	rowAT = p * p - 1; columnAT = Nw; columnATA = p * p - 1;
 	double MatrixAT[rowAT * columnAT], MatrixATA[rowAT * columnATA], BB[Nw], ATB[p * p - 1], INV_ATA_ATB[p * p - 1];
-
 	alpha = 1.0; beta = 0.00;
 	
-
 	for (int i = 0; i < rowAT; i++)
 		for (int j = 0; j < columnAT; j++)
 		{
@@ -1444,9 +1137,7 @@ void HSMA::SolveLeastSquareProblem(double* C, double** A, double* Near, int p, i
 	
 	int InfoHelp;
 	int VectorHelp[columnATA];
-	//int * VectorHelp;
-	//VectorHelp = (int*)mkl_malloc(columnATA * sizeof(int), 64);
-	
+
 	for (int i = 0; i < columnATA; i++)
 		VectorHelp[i] = 0;
 	InfoHelp = LAPACKE_dgetrf(CblasRowMajor, columnATA, columnATA, MatrixATA, columnATA, VectorHelp);
@@ -1473,7 +1164,7 @@ void HSMA::SolveLeastSquareProblem(double* C, double** A, double* Near, int p, i
 	}
 }
 
-double HSMA::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][4], int ImageNumber, double **Fibonacci, double** QRD, double** QLocalRD, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance)
+double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][4], int ImageNumber, double **Fibonacci, double** QRD, double** QLocalRD, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance)
 {
 	if (!IF_FMM_FinalPotential)
 	{
@@ -1719,113 +1410,14 @@ double HSMA::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double
 				Force[i][1] = -(EFY[i] + ENY[i]) * Q[i];
 				Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
 			}
-
-			//cout << EN[0] << "   " << EF[0] << endl;
-
 			return Energy;
 		}
-		/*
-		double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
-		for (int i = 0; i < NSource; i++)
-		{
-			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
-		}
-
-	    #pragma omp parallel shared(Source,EF,EFX,EFY,EFZ,p,C)   
-		{
-			double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
-			double CC[p * p];
-			memcpy(CC, C, sizeof(double) * p * p);
-
-	        #pragma omp for 
-			for (int i = 0; i < NSource; i++)
-			{
-				CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
-				CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
-				CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
-				CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
-				double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
-				for (int j = 0; j < p * p; j++)
-				{
-					a = a + QF[j] * CC[j];
-					b = b + QFX[j] * CC[j];
-					c = c + QFY[j] * CC[j];
-					d = d + QFZ[j] * CC[j];
-				}
-				EF[i] = EF[i] + a;
-				EFX[i] = EFX[i] + b;
-				EFY[i] = EFY[i] + c;
-				EFZ[i] = EFZ[i] + d;
-			}
-		}
-	
-		double EN[NSource],ENX[NSource],ENY[NSource],ENZ[NSource];
-		for(int i=0;i<NSource;i++)
-		{
-			EN[i]=0.00; ENX[i]=0.00; ENY[i]=0.00; ENZ[i]=0.00;
-		}
-
-		double QImage[ImageNumber];
-		for(int j=0;j<ImageNumber;j++)
-		{
-			QImage[j]=ImageCharge[j][3];
-		}
-
-		double Image[ImageNumber][4];
-		memcpy((double *)Image,(double *)ImageCharge,sizeof(double)*4*ImageNumber);
-
-		#pragma omp parallel
-		{
-			double deltax,deltay,deltaz,delta;
-
-			#pragma omp for
-			for(int i=0;i<NSource;i++)
-			{
-				double a=0.00,b=0.00,c=0.00,d=0.00;
-				for(int j=0;j<ImageNumber;j++)
-				{
-					deltax=(Image[j][0]-Source[i][0]);
-					deltay=(Image[j][1]-Source[i][1]);
-					deltaz=(Image[j][2]-Source[i][2]);
-
-				delta=sqrt(deltax*deltax+deltay*deltay+deltaz*deltaz);
-
-				if(!((fabs(deltax)<1.0e-13)&&(fabs(deltay)<1.0e-13)&&(fabs(deltaz)<1.0e-13))  )
-					{
-						a=a+QImage[j]/delta;
-						b=b+QImage[j]*(deltax)/(delta*delta*delta);
-						c=c+QImage[j]*(deltay)/(delta*delta*delta);
-						d=d+QImage[j]*(deltaz)/(delta*delta*delta);
-					}
-				}
-				EN[i]=a;
-				ENX[i]=b;
-				ENY[i]=c;
-				ENZ[i]=d;
-			}
-		}
-
-		double Energy = 0.00;
-		for (int i = 0; i < NSource; i++)
-		{
-			Pot[i] = EN[i] + EF[i];
-			Energy = Energy + Q[i] * Pot[i];
-			Force[i][0] = -(EFX[i] + ENX[i]) * Q[i];
-			Force[i][1] = -(EFY[i] + ENY[i]) * Q[i];
-			Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
-
-		}
-
-		return Energy;
-		*/
 	}
 	else
 	{
 		double eps = tolerance;
-
 		int ns = ImageNumber;
 		int nt = NSource;
-
 		double *source = (double *)malloc(3*ns*sizeof(double));
 		double* target = (double*)malloc(3 * nt * sizeof(double));
 		double *charge = (double *)malloc(ns*sizeof(double));
@@ -1852,6 +1444,7 @@ double HSMA::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double
 		lfmm3d_t_c_g_(&eps, &ns, source, charge, &nt, target, pottarg, gradtarg,&ier1);
 
 		int KL = int(2 * F + 2);
+
 		/*             BEGIN HSMA ALGORITHM                          */
 		double EF[KL];
 		double CenterPara;
@@ -1867,7 +1460,7 @@ double HSMA::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double
 			EF[i] = CenterPara * Fibonacci[i][3];
 		}
 
-		/*            开始 FMM 参数设置           */
+		/*            Set FMM parameters           */
 		ns = 2 * F + 2;
 		double* sourceF = (double*)malloc(3 * ns * sizeof(double));
 		double* chargeF = (double*)malloc(ns * sizeof(double));
@@ -1904,16 +1497,15 @@ double HSMA::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double
 		 
 		return Energy;
 	}
-
 }
 
-void HSMA::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4], int ImageNumber, int Nw, int IF_FMM_RightTerm, double Lx, double Ly, double Lz, double **PointSum, double **QuizSum, double Source[][3], double Force[][3], double* Pot, int NSource, double* Q, double tolerance)
+void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4], int ImageNumber, int Nw, int IF_FMM_RightTerm, double Lx, double Ly, double Lz, double **PointSum, double **QuizSum, double Source[][3], double Force[][3], double* Pot, int NSource, double* Q, double tolerance)
 {
 	if (IF_FMM_RightTerm)//Using FMM to calculate pairwise sum
 	{
 		double eps = tolerance;
 
-		/*            开始 FMM 参数设置           */
+		/*            Set FMM parameters           */
 		int ns = ImageNumber;
 		int nt = Nw * 2 + NSource;
 		double* source = (double*)malloc(3 * ns * sizeof(double));
@@ -1949,11 +1541,8 @@ void HSMA::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4],
 		double* pottarg = (double*)malloc(nt * sizeof(double));
 		double* gradtarg = (double*)malloc(3 * nt * sizeof(double));
 
-		//double startTime = omp_get_wtime();
 		int ier;
-		lfmm3d_t_c_g_(&eps, &ns, source, charge, &nt, target, pottarg, gradtarg,&ier);
-		//double endTime = omp_get_wtime();
-		//cout<<endl<<"Evaluate Cost Time="<<endTime-startTime<<endl<<endl<<endl;		
+		lfmm3d_t_c_g_(&eps, &ns, source, charge, &nt, target, pottarg, gradtarg,&ier);	
 
 		for (int i = 0; i < Nw; i++)
 		{
@@ -2190,102 +1779,10 @@ void HSMA::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4],
 				}
 			}
 		}
-
-		/*
-		double Paramet1[ImageNumber];
-		for (int i = 0; i < ImageNumber; i++)
-		{
-			Paramet1[i] = ImageCharge[i][3];
-		}
-
-		double Paramet[ImageNumber];
-		memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
-		double Image[ImageNumber][4];
-		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
-
-	    #pragma omp parallel shared(Near,Paramet,Image,Source,Force,Pot,Q,NSource) 
-		{
-
-			double pottarg, fldtarg, pottarg2, fldtarg2;
-			double deltax, deltay, delta;
-			double deltaz;
-
-			double lz = Lz / 2.0;
-
-			double deltax1, deltay1, deltaz1;
-
-			double delta1;
-	        #pragma omp for 
-			for (int i0 = 0; i0 < Nw; i0 += 20)
-			{
-				//#pragma vector nontemporal
-				for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
-				{
-					pottarg = 0.00;
-					fldtarg = 0.00;
-					pottarg2 = 0.00;
-					fldtarg2 = 0.00;
-					double Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
-					for (int j = 0; j < ImageNumber; j++)
-					{
-						deltax = Copy1 - Image[j][0];
-						deltay = Copy2 - Image[j][1];
-						deltaz = Copy3 - Image[j][2];
-
-						double Para = Paramet[j];
-
-						delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
-						pottarg = pottarg + Para / delta;
-
-						//deltaz1=-lz-Image[j][2]; 
-						deltax1 = Copy4 - Image[j][0];
-						deltay1 = Copy5 - Image[j][1];
-						deltaz1 = Copy6 - Image[j][2];
-
-						delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
-						pottarg2 = pottarg2 + Para / delta1;
-					}
-
-
-					Near[i] = pottarg2 - pottarg;
-				}
-			}
-	        #pragma omp for 
-			for (int i0 = 0; i0 < NSource; i0 += 20)
-			{
-				for (int i = i0; i < (i0 + 20 < NSource ? i0 + 20 : NSource); i++)
-				{
-					double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
-					for (int j = 0; j < ImageNumber; j++)
-					{
-						deltax = (Image[j][0] - Source[i][0]);
-						deltay = (Image[j][1] - Source[i][1]);
-						deltaz = (Image[j][2] - Source[i][2]);
-						double QImage = Image[j][3];
-						delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
-						if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
-						{
-							a = a + QImage / delta;
-							b = b + QImage * (deltax) / (delta * delta * delta);
-							c = c + QImage * (deltay) / (delta * delta * delta);
-							d = d + QImage * (deltaz) / (delta * delta * delta);
-						}
-					}
-					Pot[i] = a;
-					Force[i][0] = -b * Q[i];
-					Force[i][1] = -c * Q[i];
-					Force[i][2] = -d * Q[i];
-				}
-			}
-
-
-		}
-		*/
 	}
-
 }
 
-double HSMA::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][4], int ImageNumber, double **Fibonacci, double** QRD, double** QLocalRD, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance)
+double HSMA3D::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][4], int ImageNumber, double **Fibonacci, double** QRD, double** QLocalRD, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance)
 {
 	if (!IF_FMM_FinalPotential)
 	{
@@ -2359,62 +1856,12 @@ double HSMA::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Pot,
 			}
 
 			return Energy;
-		/*
-		double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
-		for (int i = 0; i < NSource; i++)
-		{
-			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
-		}
-		//double startTime = omp_get_wtime();
-	    #pragma omp parallel shared(Source,EF,EFX,EFY,EFZ,p,C)   
-		{
-			double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
-			double CC[p * p];
-			memcpy(CC, C, sizeof(double) * p * p);
-
-	    #pragma omp for //reduction(+:EF,EFX,EFY,EFZ)
-			for (int i = 0; i < NSource; i++)
-			{
-				CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
-				CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
-				CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
-				CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
-				//EF[i]=0.00;EFX[i]=0.00;EFY[i]=0.00;EFZ[i]=0.00;
-				double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
-				for (int j = 0; j < p * p; j++)
-				{
-					a = a + QF[j] * CC[j];
-					b = b + QFX[j] * CC[j];
-					c = c + QFY[j] * CC[j];
-					d = d + QFZ[j] * CC[j];
-				}
-				EF[i] = EF[i] + a;
-				EFX[i] = EFX[i] + b;
-				EFY[i] = EFY[i] + c;
-				EFZ[i] = EFZ[i] + d;
-			}
-		}
-
-		double Energy = 0.00;
-		for (int i = 0; i < NSource; i++)
-		{
-			Pot[i] = Pot[i] + EF[i];
-			Energy = Energy + Q[i] * Pot[i];
-			Force[i][0] = Force[i][0] - (EFX[i]) * Q[i];
-			Force[i][1] = Force[i][1] - (EFY[i]) * Q[i];
-			Force[i][2] = Force[i][2] - (EFZ[i]) * Q[i];
-		}
-		return Energy;
-		*/
 	}
 	else
 	{
-
 		double eps = tolerance;
-
 		int ns = ImageNumber;
 		int nt = NSource;
-
 		double* target = (double*)malloc(3 * nt * sizeof(double));
 
 		for (int i = 0; i < nt; i++)
@@ -2425,6 +1872,7 @@ double HSMA::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Pot,
 		}
 
 		int KL = int(2 * F + 2);
+
 		/*             BEGIN HSMA ALGORITHM                          */
 		double EF[KL];
 		double CenterPara;
@@ -2440,7 +1888,7 @@ double HSMA::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Pot,
 			EF[i] = CenterPara * Fibonacci[i][3];
 		}
 
-		/*            开始 FMM 参数设置           */
+		/*            Set FMM parameters           */
 		ns = 2 * F + 2;
 		double* sourceF = (double*)malloc(3 * ns * sizeof(double));
 		double* chargeF = (double*)malloc(ns * sizeof(double));
@@ -2480,3 +1928,29 @@ double HSMA::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Pot,
 
 }
 
+int fab(int n)
+{
+	if (n == 1)
+		return 1;
+	if (n == 2)
+		return 1;
+	if (n > 2)
+		return fab(n - 1) + fab(n - 2);
+}
+
+int isfab(int m)
+{
+	int result = 0;
+	for (int i = 0; fab(i) < m; i++)
+	{
+		if (fab(i + 1) == m)
+		{
+			result = 1;
+			break;
+		}
+		else
+			result = 0;
+
+	}
+	return result;
+}

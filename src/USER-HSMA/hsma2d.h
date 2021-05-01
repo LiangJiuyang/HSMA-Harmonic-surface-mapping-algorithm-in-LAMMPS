@@ -10,6 +10,11 @@
 
   See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+   Contributing author: Jiuyang Liang (liangjiuyang@sjtu.edu.cn)
+------------------------------------------------------------------------- */
+
 #ifdef KSPACE_CLASS
 
 KSpaceStyle(HSMA2D, HSMA2D)
