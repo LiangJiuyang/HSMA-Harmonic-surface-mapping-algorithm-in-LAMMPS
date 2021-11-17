@@ -26,17 +26,6 @@ KSpaceStyle(HSMA2D, HSMA2D)
 
 #include "kspace.h"
 
-#include <cstdio>
-#include <cstring>
-#include <cstdlib>
-#include "atom.h"
-#include "comm.h"
-#include "domain.h"
-#include "force.h"
-#include "memory.h"
-#include "error.h"
-#include "math.h"
-
 extern "C" {  void lfmm3d_s_c_g_(double* eps, int* nsource, double* source, double* charge, double* pot, double* grad, int* ier); }
 
 namespace LAMMPS_NS {
