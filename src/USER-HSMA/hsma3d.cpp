@@ -14,45 +14,55 @@
 /* ----------------------------------------------------------------------
    Contributing author: Jiuyang Liang (liangjiuyang@sjtu.edu.cn)
 ------------------------------------------------------------------------- */
+#include "hsma3d.h"
 
-#include <cstdio>
-#include <cstring>
-#include <cstdlib>
 #include "atom.h"
 #include "comm.h"
-#include "domain.h" 
-#include "force.h"
-#include "memory.h"
-#include "error.h"
-#include "math.h"
-#include "update.h"
-#include "hsma3d.h"
-#include<iostream>
-#include <sstream>
-#include <fstream>
-#include"mkl.h"
-#include<omp.h>
-#include<iomanip>
-#include <immintrin.h> 
 #include "complex.h"
+#include "domain.h"
+#include "error.h"
+#include "force.h"
+#include "math.h"
+#include "math_const.h"
+#include "math_special.h"
+#include "memory.h"
+#include "update.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <iomanip>
+
+#if defined(_OPENMP)
+#include<omp.h>
+#endif
+
+#if defined(__AVX512F__)
+#include <immintrin.h>
+#endif
+
+#if defined(LMP_USE_MKL_RNG)
+#include"mkl.h"
+#endif
 
 extern "C" {void lfmm3d_t_c_g_(double *eps, int *nsource,double *source, double *charge, int *nt, double *targ, double *pottarg, double *gradtarg, int *ier);}
 extern int fab(int n);
 extern int isfab(int m);
 
 using namespace LAMMPS_NS; 
-using namespace std;
+using namespace MathConst;
+using namespace MathSpecial;
 
 /* ---------------------------------------------------------------------- */
 HSMA3D::HSMA3D(LAMMPS *lmp) : KSpace(lmp)
 {
   maxatom = atom->natoms;
-  MPI_Comm_rank(world, &me);
-  MPI_Comm_size(MPI_COMM_WORLD, &RankID);
+  me = comm->me;
+  RankID = comm->nprocs;
   Lx = domain->xprd;
   Ly = domain->yprd;
   Lz = domain->zprd * slab_volfactor;
-  pi = 3.141592653589793;
+  pi = MY_PI;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -77,9 +87,11 @@ void HSMA3D::settings(int narg, char **arg)
 		  update->ntimestep));
 	  Lambda = 1.3;
   }
+  if (atom->natoms > 214783648)
+	  error->all(FLERR, "The current version of HSMA is not available for such big system.");
   if (p<1)
 	  error->all(FLERR, "p shoule be >=1.");
-  if (p > 50){
+  if (p > 50 && comm->me == 0){
 	  error->warning(FLERR, fmt::format("The p is too big! Please use a smaller p. Set p to the default value.",
 		  update->ntimestep));
 	  p = 8;
@@ -88,13 +100,13 @@ void HSMA3D::settings(int narg, char **arg)
 	  error->all(FLERR, "Using wrong value of IF_FMM_RightTerm.");
   if ((IF_FMM_FinalPotential) != 0 && (IF_FMM_FinalPotential != 1))
 	  error->all(FLERR, "Using wrong value of IF_FMM_FinalPotential.");
-  if (Fp > F || Fp < 0 || F < 0 || isfab(int(Fp)) != 1 || isfab(int(F)) != 1) {
+  if ( (Fp > F || Fp < 0 || F < 0 || isfab(int(Fp)) != 1 || isfab(int(F)) != 1) && comm->me == 0) {
 	  error->warning(FLERR, fmt::format("Using wrong value of Fp and F. Set Fp and F to the default value.",
 		  update->ntimestep));
 	  Fp = 89.0;
 	  F = 144.0;
   }
-  if (Nw <= p * p)
+  if (Nw <= p * p && comm->me == 0)
   {
 	  error->warning(FLERR, fmt::format("Nw is too small! Set Nw to the default value.",
 		  update->ntimestep));
@@ -107,7 +119,7 @@ void HSMA3D::settings(int narg, char **arg)
 
 void HSMA3D::init()
 {
-  printf("Setting up HSMA implemented by Jiuyang Liang (Release 1.0.0)\n");
+  utils::logmesg(lmp, "Setting up HSMA implemented by Jiuyang Liang (Release 1.0.0)\n");
   
   PointSum = new double * [Nw];
   QuizSum = new double * [Nw];
@@ -190,8 +202,10 @@ void HSMA3D::init()
 	  QRD[i] = new double[p*p];
 	  QLocalRD[i]= new double[p * p];
   }
+#if defined(_OPENMP)
   #pragma omp parallel
   {
+#endif
 	  double MulQ[p * p], MulLocalQ[p * p];
       #pragma omp for schedule(static) private(MulQ,MulLocalQ)
 	  for (int i = 0; i < Np; i++)
@@ -204,8 +218,9 @@ void HSMA3D::init()
 			  QLocalRD[i][j] = MulLocalQ[j];
 		  }
 	  }
+#if defined(_OPENMP)
   }
-  cout << Lx << "=Lx   " << Ly << "=Ly    " << Lz << "=Lz   " << Lambda << "=Lambda    " << p << "=p   " << Nw << "=Nw    "  << Fp << "=Fp   " << F << "=F   " << IF_FMM_RightTerm << "=IF_FMM_RightTerm   " << IF_FMM_FinalPotential << "=IF_FMM_FinalPotential   " << endl;
+#endif
 }
 
 void HSMA3D::compute(int eflag, int vflag)
@@ -228,9 +243,6 @@ void HSMA3D::compute(int eflag, int vflag)
   double **f = atom->f;
   double boxlo[3] = { domain->boxlo[0] ,domain->boxlo[1],domain->boxlo[2]};
   double boxhi[3] = { domain->boxhi[0] ,domain->boxhi[1],domain->boxhi[2]};
-
-  double time;
-  time = MPI_Wtime();
 
   if (RankID == 1)
   {
@@ -404,14 +416,7 @@ double HSMA3D::memory_usage()
 
 double fac(double t)//calculate factorial
 {
-	double s;
-	if (abs(t - 1) < 0.001 || abs(t) < 0.001)
-		s = 1.0;
-	else
-	{
-		s = t * fac(t - 1) + 0.00;
-	}
-	return s;
+	return factorial(int(t));
 }
 
 void HSMA3D::CalculateRDMultipoleExpansion(double* Q, int p, double x, double y, double z)
@@ -461,7 +466,7 @@ void HSMA3D::CalculateRDMultipoleExpansion(double* Q, int p, double x, double y,
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -521,7 +526,7 @@ void HSMA3D::CalculateLocalRDMultipoleExpansion(double* Q, int p, double x, doub
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -569,7 +574,7 @@ void HSMA3D::CalculateMultipoleExpansion(double* Q, int p, double x, double y, d
 	}
 
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!      
+	t = 0;//normlization      
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -648,7 +653,7 @@ void HSMA3D::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, 
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -728,7 +733,7 @@ void HSMA3D::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y,
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -808,7 +813,7 @@ void HSMA3D::CalculateYDMultipoleExpansion(double* Q, int p, double x, double y,
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -990,6 +995,7 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 	{
 		if (tolerance > 0.000001)
 		{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			float Paramet1[int(ceil(ImageNumber / 16.0)) * 16];
 			float Image_X[int(ceil(ImageNumber / 16.0)) * 16], Image_Y[int(ceil(ImageNumber / 16.0)) * 16], Image_Z[int(ceil(ImageNumber / 16.0)) * 16];
 			for (int i = 0; i < int(ceil(ImageNumber / 16.0)) * 16; i++)
@@ -1049,9 +1055,52 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 					Near[i] = pottarg1 - pottarg;
 				}
 			}
+#else
+			float Paramet1[ImageNumber];
+			for (int i = 0; i < ImageNumber; i++)
+			{
+				Paramet1[i] = ImageCharge[i][3];
+			}
+			double Paramet[ImageNumber];
+			memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
+			double Image[ImageNumber][4];
+			memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
+			float pottarg, fldtarg, pottarg2, fldtarg2;
+			float deltax, deltay, delta;
+			float deltaz;
+			float deltax1, deltay1, deltaz1;
+			float delta1;
+			for (int i0 = 0; i0 < Nw; i0 += 20)
+			{
+				for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
+				{
+					pottarg = 0.00;
+					fldtarg = 0.00;
+					pottarg2 = 0.00;
+					fldtarg2 = 0.00;
+					float Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
+					for (int j = 0; j < ImageNumber; j++)
+					{
+						deltax = Copy1 - Image[j][0];
+						deltay = Copy2 - Image[j][1];
+						deltaz = Copy3 - Image[j][2];
+						float Para = Paramet[j];
+						delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+						pottarg = pottarg + Para / delta;
+						deltax1 = Copy4 - Image[j][0];
+						deltay1 = Copy5 - Image[j][1];
+						deltaz1 = Copy6 - Image[j][2];
+						delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
+						pottarg2 = pottarg2 + Para / delta1;
+					}
+					Near[i] = pottarg2 - pottarg;
+				}
+			}
+#endif
 		}
 		else
 		{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			double Paramet1[int(ceil(ImageNumber / 8.0)) * 8];
 			double Image_X[int(ceil(ImageNumber / 8.0)) * 8], Image_Y[int(ceil(ImageNumber / 8.0)) * 8], Image_Z[int(ceil(ImageNumber / 8.0)) * 8];
 			for (int i = 0; i < int(ceil(ImageNumber / 8.0)) * 8; i++)
@@ -1111,12 +1160,55 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 					Near[i] = pottarg1 - pottarg;
 				}
 			}
+#else
+		double Paramet1[ImageNumber];
+		for (int i = 0; i < ImageNumber; i++)
+		{
+			Paramet1[i] = ImageCharge[i][3];
+		}
+		double Paramet[ImageNumber];
+		memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
+		double Image[ImageNumber][4];
+		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
+		double pottarg, fldtarg, pottarg2, fldtarg2;
+		double deltax, deltay, delta;
+		double deltaz;
+		double deltax1, deltay1, deltaz1;
+		double delta1;
+		for (int i0 = 0; i0 < Nw; i0 += 20)
+		{
+			for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
+			{
+				pottarg = 0.00;
+				fldtarg = 0.00;
+				pottarg2 = 0.00;
+				fldtarg2 = 0.00;
+				double Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
+				for (int j = 0; j < ImageNumber; j++)
+				{
+					deltax = Copy1 - Image[j][0];
+					deltay = Copy2 - Image[j][1];
+					deltaz = Copy3 - Image[j][2];
+					double Para = Paramet[j];
+					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+					pottarg = pottarg + Para / delta;
+					deltax1 = Copy4 - Image[j][0];
+					deltay1 = Copy5 - Image[j][1];
+					deltaz1 = Copy6 - Image[j][2];
+					delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
+					pottarg2 = pottarg2 + Para / delta1;
+				}
+				Near[i] = pottarg2 - pottarg;
+			}
+		}
+#endif
 		}
 	}
 }
 
 void HSMA3D::SolveLeastSquareProblem(double* C, double** A, double* Near, int p, int Nw)
 {
+#if defined(LMP_USE_MKL_RNG)
 	int rowAT, columnATA, columnAT;
 	double alpha, beta;
 	rowAT = p * p - 1; columnAT = Nw; columnATA = p * p - 1;
@@ -1162,6 +1254,9 @@ void HSMA3D::SolveLeastSquareProblem(double* C, double** A, double* Near, int p,
 	{
 		C[i + 1] = INV_ATA_ATB[i];
 	}
+#else
+	error->all(FLERR, "The HSMA requires INTEL-MKL library");
+#endif
 }
 
 double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][4], int ImageNumber, double **Fibonacci, double** QRD, double** QLocalRD, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance)
@@ -1170,6 +1265,7 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 	{
 		if (tolerance > 0.000001)
 		{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			float EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
 			float EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
 			float Q_Image[int(ceil(ImageNumber / 16.0)) * 16];
@@ -1290,9 +1386,84 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			}
 
 			return Energy;
+#else
+		float EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
+		for (int i = 0; i < NSource; i++)
+		{
+			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
+		}
+		float QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+		double CC[p * p];
+		memcpy(CC, C, sizeof(double) * p * p);
+		for (int i = 0; i < NSource; i++)
+		{
+			CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
+			float a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+			for (int j = 0; j < p * p; j++)
+			{
+				a = a + QF[j] * CC[j];
+				b = b + QFX[j] * CC[j];
+				c = c + QFY[j] * CC[j];
+				d = d + QFZ[j] * CC[j];
+			}
+			EF[i] = EF[i] + a;
+			EFX[i] = EFX[i] + b;
+			EFY[i] = EFY[i] + c;
+			EFZ[i] = EFZ[i] + d;
+		}
+		float EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
+		for (int i = 0; i < NSource; i++)
+		{
+			EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
+		}
+		float QImage[ImageNumber];
+		for (int j = 0; j < ImageNumber; j++)
+		{
+			QImage[j] = ImageCharge[j][3];
+		}
+		double Image[ImageNumber][4];
+		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
+		float deltax, deltay, deltaz, delta;
+		for (int i = 0; i < NSource; i++)
+		{
+			float a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+			for (int j = 0; j < ImageNumber; j++)
+			{
+				deltax = (Image[j][0] - Source[i][0]);
+				deltay = (Image[j][1] - Source[i][1]);
+				deltaz = (Image[j][2] - Source[i][2]);
+				delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+				if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
+				{
+					a = a + QImage[j] / delta;
+					b = b + QImage[j] * (deltax) / (delta * delta * delta);
+					c = c + QImage[j] * (deltay) / (delta * delta * delta);
+					d = d + QImage[j] * (deltaz) / (delta * delta * delta);
+				}
+			}
+			EN[i] = a;
+			ENX[i] = b;
+			ENY[i] = c;
+			ENZ[i] = d;
+		}
+		double Energy = 0.00;
+		for (int i = 0; i < NSource; i++)
+		{
+			Pot[i] = EN[i] + EF[i];
+			Energy = Energy + Q[i] * Pot[i];
+			Force[i][0] = -(EFX[i] + ENX[i]) * Q[i];
+			Force[i][1] = -(EFY[i] + ENY[i]) * Q[i];
+			Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
+		}
+		return Energy;
+#endif
 		}
 		else
 		{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
 			double EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
 			double Q_Image[int(ceil(ImageNumber / 8.0)) * 8];
@@ -1411,6 +1582,80 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 				Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
 			}
 			return Energy;
+#else
+		double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
+		for (int i = 0; i < NSource; i++)
+		{
+			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
+		}
+		double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+		double CC[p * p];
+		memcpy(CC, C, sizeof(double) * p * p);
+		for (int i = 0; i < NSource; i++)
+		{
+			CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
+			double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+			for (int j = 0; j < p * p; j++)
+			{
+				a = a + QF[j] * CC[j];
+				b = b + QFX[j] * CC[j];
+				c = c + QFY[j] * CC[j];
+				d = d + QFZ[j] * CC[j];
+			}
+			EF[i] = EF[i] + a;
+			EFX[i] = EFX[i] + b;
+			EFY[i] = EFY[i] + c;
+			EFZ[i] = EFZ[i] + d;
+		}
+		double EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
+		for (int i = 0; i < NSource; i++)
+		{
+			EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
+		}
+		double QImage[ImageNumber];
+		for (int j = 0; j < ImageNumber; j++)
+		{
+			QImage[j] = ImageCharge[j][3];
+		}
+		double Image[ImageNumber][4];
+		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
+		double deltax, deltay, deltaz, delta;
+		for (int i = 0; i < NSource; i++)
+		{
+			double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+			for (int j = 0; j < ImageNumber; j++)
+			{
+				deltax = (Image[j][0] - Source[i][0]);
+				deltay = (Image[j][1] - Source[i][1]);
+				deltaz = (Image[j][2] - Source[i][2]);
+				delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+				if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
+				{
+					a = a + QImage[j] / delta;
+					b = b + QImage[j] * (deltax) / (delta * delta * delta);
+					c = c + QImage[j] * (deltay) / (delta * delta * delta);
+					d = d + QImage[j] * (deltaz) / (delta * delta * delta);
+				}
+			}
+			EN[i] = a;
+			ENX[i] = b;
+			ENY[i] = c;
+			ENZ[i] = d;
+		}
+		double Energy = 0.00;
+		for (int i = 0; i < NSource; i++)
+		{
+			Pot[i] = EN[i] + EF[i];
+			Energy = Energy + Q[i] * Pot[i];
+			Force[i][0] = -(EFX[i] + ENX[i]) * Q[i];
+			Force[i][1] = -(EFY[i] + ENY[i]) * Q[i];
+			Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
+		}
+		return Energy;
+#endif
 		}
 	}
 	else
@@ -1556,7 +1801,6 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 			Force[i][2] = -gradtarg[6 * Nw + 3 * i + 2] * Q[i];
 		}
 
-
 		free(source); free(target); free(charge); free(pottarg);
 		source = NULL; target = NULL; charge = NULL; pottarg = NULL;
 	}
@@ -1564,6 +1808,7 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 	{
 		if (tolerance > 0.000001)
 		{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			float Paramet1[int(ceil(ImageNumber / 16.0)) * 16];
 			float Image_X[int(ceil(ImageNumber / 16.0)) * 16], Image_Y[int(ceil(ImageNumber / 16.0)) * 16], Image_Z[int(ceil(ImageNumber / 16.0)) * 16];
 			for (int i = 0; i < int(ceil(ImageNumber / 16.0)) * 16; i++)
@@ -1669,9 +1914,79 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 					Force[i][2] = d * Q[i];
 				}
 			}
+#else
+		float Paramet1[ImageNumber];
+		for (int i = 0; i < ImageNumber; i++)
+		{
+			Paramet1[i] = ImageCharge[i][3];
+		}
+		double Paramet[ImageNumber];
+		memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
+		double Image[ImageNumber][4];
+		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
+		float pottarg, fldtarg, pottarg2, fldtarg2;
+		float deltax, deltay, delta;
+		float deltaz;
+		float lz = Lz / 2.0;
+		float deltax1, deltay1, deltaz1;
+		float delta1;
+		for (int i0 = 0; i0 < Nw; i0 += 20)
+		{
+			for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
+			{
+				pottarg = 0.00;
+				fldtarg = 0.00;
+				pottarg2 = 0.00;
+				fldtarg2 = 0.00;
+				float Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
+				for (int j = 0; j < ImageNumber; j++)
+				{
+					deltax = Copy1 - Image[j][0];
+					deltay = Copy2 - Image[j][1];
+					deltaz = Copy3 - Image[j][2];
+					float Para = Paramet[j];
+					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+					pottarg = pottarg + Para / delta;
+					deltax1 = Copy4 - Image[j][0];
+					deltay1 = Copy5 - Image[j][1];
+					deltaz1 = Copy6 - Image[j][2];
+					delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
+					pottarg2 = pottarg2 + Para / delta1;
+				}
+				Near[i] = pottarg2 - pottarg;
+			}
+		} 
+		for (int i0 = 0; i0 < NSource; i0 += 20)
+		{
+			for (int i = i0; i < (i0 + 20 < NSource ? i0 + 20 : NSource); i++)
+			{
+				float a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+				for (int j = 0; j < ImageNumber; j++)
+				{
+					deltax = (Image[j][0] - Source[i][0]);
+					deltay = (Image[j][1] - Source[i][1]);
+					deltaz = (Image[j][2] - Source[i][2]);
+					float QImage = Image[j][3];
+					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+					if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
+					{
+						a = a + QImage / delta;
+						b = b + QImage * (deltax) / (delta * delta * delta);
+						c = c + QImage * (deltay) / (delta * delta * delta);
+						d = d + QImage * (deltaz) / (delta * delta * delta);
+					}
+				}
+				Pot[i] = a;
+				Force[i][0] = -b * Q[i];
+				Force[i][1] = -c * Q[i];
+				Force[i][2] = -d * Q[i];
+			}
+		}
+#endif
 		}
 		else
 		{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			double Paramet1[int(ceil(ImageNumber / 8.0)) * 8];
 			double Image_X[int(ceil(ImageNumber / 8.0)) * 8], Image_Y[int(ceil(ImageNumber / 8.0)) * 8], Image_Z[int(ceil(ImageNumber / 8.0)) * 8];
 			for (int i = 0; i < int(ceil(ImageNumber / 8.0)) * 8; i++)
@@ -1778,6 +2093,75 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 					Force[i][2] = d * Q[i];
 				}
 			}
+#else
+		double Paramet1[ImageNumber];
+		for (int i = 0; i < ImageNumber; i++)
+		{
+			Paramet1[i] = ImageCharge[i][3];
+		}
+		double Paramet[ImageNumber];
+		memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
+		double Image[ImageNumber][4];
+		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
+		double pottarg, fldtarg, pottarg2, fldtarg2;
+		double deltax, deltay, delta;
+		double deltaz;
+		double lz = Lz / 2.0;
+		double deltax1, deltay1, deltaz1;
+		double delta1;
+		for (int i0 = 0; i0 < Nw; i0 += 20)
+		{
+			for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
+			{
+				pottarg = 0.00;
+				fldtarg = 0.00;
+				pottarg2 = 0.00;
+				fldtarg2 = 0.00;
+				double Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
+				for (int j = 0; j < ImageNumber; j++)
+				{
+					deltax = Copy1 - Image[j][0];
+					deltay = Copy2 - Image[j][1];
+					deltaz = Copy3 - Image[j][2];
+					double Para = Paramet[j];
+					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+					pottarg = pottarg + Para / delta;
+					deltax1 = Copy4 - Image[j][0];
+					deltay1 = Copy5 - Image[j][1];
+					deltaz1 = Copy6 - Image[j][2];
+					delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
+					pottarg2 = pottarg2 + Para / delta1;
+				}
+				Near[i] = pottarg2 - pottarg;
+			}
+		}
+		for (int i0 = 0; i0 < NSource; i0 += 20)
+		{
+			for (int i = i0; i < (i0 + 20 < NSource ? i0 + 20 : NSource); i++)
+			{
+				double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+				for (int j = 0; j < ImageNumber; j++)
+				{
+					deltax = (Image[j][0] - Source[i][0]);
+					deltay = (Image[j][1] - Source[i][1]);
+					deltaz = (Image[j][2] - Source[i][2]);
+					double QImage = Image[j][3];
+					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+					if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
+					{
+						a = a + QImage / delta;
+						b = b + QImage * (deltax) / (delta * delta * delta);
+						c = c + QImage * (deltay) / (delta * delta * delta);
+						d = d + QImage * (deltaz) / (delta * delta * delta);
+					}
+				}
+				Pot[i] = a;
+				Force[i][0] = -b * Q[i];
+				Force[i][1] = -c * Q[i];
+				Force[i][2] = -d * Q[i];
+			}
+		}
+#endif
 		}
 	}
 }
@@ -1786,6 +2170,7 @@ double HSMA3D::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Po
 {
 	if (!IF_FMM_FinalPotential)
 	{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
 			double C_New[int(ceil(p * p / 8.0)) * 8];
 			for (int i = 0; i<int(ceil(p * p / 8.0)) * 8; i++)
@@ -1856,6 +2241,45 @@ double HSMA3D::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Po
 			}
 
 			return Energy;
+#else
+		double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
+		for (int i = 0; i < NSource; i++)
+		{
+			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
+		}
+		double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+		double CC[p * p];
+		memcpy(CC, C, sizeof(double) * p * p);
+		for (int i = 0; i < NSource; i++)
+		{
+			CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
+			double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+			for (int j = 0; j < p * p; j++)
+			{
+				a = a + QF[j] * CC[j];
+				b = b + QFX[j] * CC[j];
+				c = c + QFY[j] * CC[j];
+				d = d + QFZ[j] * CC[j];
+			}
+			EF[i] = EF[i] + a;
+			EFX[i] = EFX[i] + b;
+			EFY[i] = EFY[i] + c;
+			EFZ[i] = EFZ[i] + d;
+		}
+		double Energy = 0.00;
+		for (int i = 0; i < NSource; i++)
+		{
+			Pot[i] = Pot[i] + EF[i];
+			Energy = Energy + Q[i] * Pot[i];
+			Force[i][0] = Force[i][0] - (EFX[i]) * Q[i];
+			Force[i][1] = Force[i][1] - (EFY[i]) * Q[i];
+			Force[i][2] = Force[i][2] - (EFZ[i]) * Q[i];
+		}
+		return Energy;
+#endif
 	}
 	else
 	{
