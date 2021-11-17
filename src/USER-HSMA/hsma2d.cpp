@@ -1289,9 +1289,8 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 			Paramet1[i] = ImageCharge[i][3] * pow(Gamma, fabs(ImageCharge[i][4]) + 0.00);
 		}
 		
-#if defined(_OPENMP)
+#if defined(_OPENMP) && defined(__AVX512F__)
         #pragma omp parallel
-#endif
 		{
 			int id = omp_get_thread_num();
 			int size = omp_get_num_threads();
@@ -1427,6 +1426,45 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 				}
 			}
 		}
+#else
+	double Paramet[ImageNumber];
+	memcpy(Paramet, Paramet1, sizeof(double)* ImageNumber);
+	double pottarg, fldtarg, pottarg2, fldtarg2;
+	double deltax, deltay, deltaz, delta;
+	float inv_delta;
+	double Image[ImageNumber][5];
+	double lz = Lz / 2.0;
+	memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 5 * ImageNumber);
+	double IntegralTopCopy[S * Nw * S * Nw][4];
+	memcpy((double*)IntegralTopCopy, (double*)IntegralTop, sizeof(double)* S* Nw* S* Nw * 4);
+	for (int i = 0; i < (S * Nw) * (S * Nw); i++)
+	{
+		pottarg = 0.00;
+		fldtarg = 0.00;
+		pottarg2 = 0.00;
+		fldtarg2 = 0.00;
+		for (int j = 0; j < ImageNumber; j++)
+		{
+			deltax = IntegralTopCopy[i][0] - Image[j][0];
+			deltay = IntegralTopCopy[i][1] - Image[j][1];
+			deltaz = lz - Image[j][2];
+			double Para = Paramet[j];
+			delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+			fldtarg = fldtarg + (-deltaz) * Para / (delta * delta * delta);
+			pottarg = pottarg + Para / delta;
+			deltaz = -lz - Image[j][2];
+			delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+			fldtarg2 = fldtarg2 + (-deltaz) * Para / (delta * delta * delta);
+			pottarg2 = pottarg2 + Para / delta;
+		}
+		int ix = floor(i / (S * Nw));
+		int iy = i - ix * (S * Nw);
+		Top[ix][iy] = pottarg;
+		TopZD[ix][iy] = fldtarg;
+		Down[ix][iy] = pottarg2;
+		DownZD[ix][iy] = fldtarg2;
+	}
+#endif
 		
 	}
 }
@@ -1440,6 +1478,7 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 		RightTermImag[i] = 0.00;
 	}
 
+#if defined(_OPENMP) && defined(__AVX512F__)
      #pragma omp parallel
 	{
 		int id = omp_get_thread_num();
@@ -1621,11 +1660,37 @@ void HSMA2D::ConstructRightTerm(double* RightTermReal, double* RightTermImag, do
 			}
 		}
 	}
+#else
+	double E1, E2, E3, E4, I1, I2, I3, I4;
+	double EQ1, EQ2, EQ3, EQ4;
+	int index_r;
+	for (int j = -NJKBound; j <= NJKBound; j++)
+		for (int k = -NJKBound; k <= NJKBound; k++)
+		{
+			index_r = (j + NJKBound) * (2 * NJKBound + 1) + k + NJKBound;
+			for (int m = 0; m < S * Nw; m++)
+				for (int n = 0; n < S * Nw; n++)
+				{
+					E1 = ((1.0 / EU) * TopZDNear[m][n] + mu * sqrt(j * j + k * k) * TopNear[m][n]);
+					I1 = -mu * (j * IntegralTop[m][n][0] + k * IntegralTop[m][n][1]);
+					EQ1 = E1 * cos(I1);
+					RightTermReal[index_r] = RightTermReal[index_r] + (EQ1)*IntegralTop[m][n][3];
+					EQ1 = E1 * sin(I1);
+					RightTermImag[index_r] = RightTermImag[index_r] + EQ1 * IntegralTop[m][n][3];
+					E1 = ((1.0 / EU) * DownZDNear[m][n] - mu * sqrt(j * j + k * k) * DownNear[m][n]);
+					I1 = -mu * (j * IntegralDown[m][n][0] + k * IntegralDown[m][n][1]);
+					EQ1 = E1 * cos(I1);
+					RightTermReal[(2 * NJKBound + 1) * (2 * NJKBound + 1) + index_r] += (EQ1)*IntegralDown[m][n][3];
+					EQ1 = E1 * sin(I1);
+					RightTermImag[(2 * NJKBound + 1) * (2 * NJKBound + 1) + index_r] += (EQ1)*IntegralDown[m][n][3];
+				}
+		}
+#endif
 }
 
 void HSMA2D::SolveLeastSquareProblem(double* C, double** LeftTermReal, double** LeftTermImag, double* RightTermReal, double* RightTermImag, int p, int row)
 {
-
+#if defined(LMP_USE_MKL_RNG)
 	int Up = floor((p * p - 1) / 2), Down = ceil((p * p - 1) / 2.0);
 
 	int rowAT, columnATA, columnAT;
@@ -1719,16 +1784,19 @@ void HSMA2D::SolveLeastSquareProblem(double* C, double** LeftTermReal, double** 
 	for (int i = 0; i < Down; i++)
 	{
 		C[2 * i + 1] = INV_ATA_ATB_New[i];
-	}	
+	}
+#else
+	error->all(FLERR, "The HSMA2D requires INTEL-MKL library");
+#endif
 }
 
 double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][5], int ImageNumber, double **Fibonacci, double** QRD, double** QLocalRD, double Gamma, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance)
 {
 	if (!IF_FMM_FinalPotential)
 	{
-
 		if (tolerance > 0.000001)
 		{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			float EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
 			float EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
 			float Q_Image[int(ceil(ImageNumber / 16.0)) * 16];
@@ -1849,9 +1917,76 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			}
 
 			return Energy;
+#else
+		float EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
+		float QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+		for (int i = 0; i < NSource; i++)
+		{
+			CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
+			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
+			for (int j = 0; j < p * p; j++)
+			{
+				EF[i] = EF[i] + QF[j] * C[j];
+				EFX[i] = EFX[i] + QFX[j] * C[j];
+				EFY[i] = EFY[i] + QFY[j] * C[j];
+				EFZ[i] = EFZ[i] + QFZ[j] * C[j];
+			}
+		}
+		float EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
+		for (int i = 0; i < NSource; i++)
+		{
+			EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
+		}
+		float Q_Image[ImageNumber];
+		for (int j = 0; j < ImageNumber; j++)
+		{
+			Q_Image[j] = ImageCharge[j][3] * pow(Gamma, abs(ImageCharge[j][4]));
+		}
+		double Image[ImageNumber][5];
+		double QImage[ImageNumber];
+		float deltax, deltay, deltaz, delta;
+		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 5 * ImageNumber);
+		memcpy((double*)QImage, (double*)Q_Image, sizeof(double) * ImageNumber);
+		for (int i = 0; i < NSource; i++)
+		{
+			float a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+			for (int j = 0; j < ImageNumber; j++)
+			{
+				deltax = (Image[j][0] - Source[i][0]);
+				deltay = (Image[j][1] - Source[i][1]);
+				deltaz = (Image[j][2] - Source[i][2]);
+				delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+				if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
+				{
+					a = a + QImage[j] / delta;
+					b = b + QImage[j] * (deltax) / (delta * delta * delta);
+					c = c + QImage[j] * (deltay) / (delta * delta * delta);
+					d = d + QImage[j] * (deltaz) / (delta * delta * delta);
+				}
+			}
+			EN[i] = a;
+			ENX[i] = b;
+			ENY[i] = c;
+			ENZ[i] = d;
+		}
+		double Energy = 0.00;
+		for (int i = 0; i < NSource; i++)
+		{
+			Pot[i] = EN[i] + EF[i];
+			Energy = Energy + Q[i] * Pot[i];
+			Force[i][0] = -(EFX[i] + ENX[i]) * Q[i];
+			Force[i][1] = -(EFY[i] + ENY[i]) * Q[i];
+			Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
+		}
+		return Energy;
+#endif
 		}
 		else
 		{
+#if defined(_OPENMP) && defined(__AVX512F__)
 			double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
 			double EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
 			double Q_Image[int(ceil(ImageNumber / 8.0)) * 8];
@@ -1971,11 +2106,76 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			}
 
 			return Energy;
+#else
+		double EF[NSource], EFX[NSource], EFY[NSource], EFZ[NSource];
+		double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
+		for (int i = 0; i < NSource; i++)
+		{
+			CalculateMultipoleExpansion(QF, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateZDerivativeMultipoleExpansion(QFZ, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateXDMultipoleExpansion(QFX, p, Source[i][0], Source[i][1], Source[i][2]);
+			CalculateYDMultipoleExpansion(QFY, p, Source[i][0], Source[i][1], Source[i][2]);
+			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
+			for (int j = 0; j < p * p; j++)
+			{
+				EF[i] = EF[i] + QF[j] * C[j];
+				EFX[i] = EFX[i] + QFX[j] * C[j];
+				EFY[i] = EFY[i] + QFY[j] * C[j];
+				EFZ[i] = EFZ[i] + QFZ[j] * C[j];
+			}
+		}
+		double EN[NSource], ENX[NSource], ENY[NSource], ENZ[NSource];
+		for (int i = 0; i < NSource; i++)
+		{
+			EN[i] = 0.00; ENX[i] = 0.00; ENY[i] = 0.00; ENZ[i] = 0.00;
+		}
+		double Q_Image[ImageNumber];
+		for (int j = 0; j < ImageNumber; j++)
+		{
+			Q_Image[j] = ImageCharge[j][3] * pow(Gamma, abs(ImageCharge[j][4]));
+		}
+		double Image[ImageNumber][5];
+		double QImage[ImageNumber];
+		double deltax, deltay, deltaz, delta;
+		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 5 * ImageNumber);
+		memcpy((double*)QImage, (double*)Q_Image, sizeof(double) * ImageNumber);
+		for (int i = 0; i < NSource; i++)
+		{
+			double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
+			for (int j = 0; j < ImageNumber; j++)
+			{
+				deltax = (Image[j][0] - Source[i][0]);
+				deltay = (Image[j][1] - Source[i][1]);
+				deltaz = (Image[j][2] - Source[i][2]);
+				delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
+				if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
+				{
+					a = a + QImage[j] / delta;
+					b = b + QImage[j] * (deltax) / (delta * delta * delta);
+					c = c + QImage[j] * (deltay) / (delta * delta * delta);
+					d = d + QImage[j] * (deltaz) / (delta * delta * delta);
+				}
+			}
+			EN[i] = a;
+			ENX[i] = b;
+			ENY[i] = c;
+			ENZ[i] = d;
+		}
+		double Energy = 0.00;
+		for (int i = 0; i < NSource; i++)
+		{
+			Pot[i] = EN[i] + EF[i];
+			Energy = Energy + Q[i] * Pot[i];
+			Force[i][0] = -(EFX[i] + ENX[i]) * Q[i];
+			Force[i][1] = -(EFY[i] + ENY[i]) * Q[i];
+			Force[i][2] = -(EFZ[i] + ENZ[i]) * Q[i];
+		}
+		return Energy;
+#endif
 		}
 	}
 	else
 	{
-
 		double eps = tolerance;
 		int ns = ImageNumber;
 		int nt = NSource;
@@ -2050,7 +2250,6 @@ double HSMA2D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			Force[i][2] = -(gradtarg[3 * i + 2] + gradtargF[3 * i + 2]) * Q[i];
 		}
 
-		cout << pottarg[0] << "   " << pottargF[0] << endl;
 		return Energy;
 	}
 }
