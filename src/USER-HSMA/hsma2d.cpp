@@ -217,7 +217,8 @@ void HSMA2D::init()
 	SetFibonacci(Fibonacci, F, Fp, Np, Rs, PI);
 
 #if defined(_OPENMP)
-	#pragma omp parallel {
+	#pragma omp parallel 
+	{
 #endif
 		double MulQ[p * p], MulLocalQ[p * p];
 		#if defined(_OPENMP)
