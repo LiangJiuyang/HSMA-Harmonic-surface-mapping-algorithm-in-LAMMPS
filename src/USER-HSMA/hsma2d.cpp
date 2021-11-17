@@ -15,43 +15,54 @@
    Contributing author: Jiuyang Liang (liangjiuyang@sjtu.edu.cn)
 ------------------------------------------------------------------------- */
 
+#include "hsma2d.h"
+
+#include "atom.h"
+#include "comm.h"
+#include "complex.h"
+#include "domain.h"
+#include "error.h"
+#include "force.h"
+#include "math.h"
+#include "math_const.h"
+#include "math_special.h"
+#include "memory.h"
+#include "update.h"
+
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
-#include "atom.h"
-#include "comm.h"
-#include "domain.h"
-#include "force.h"
-#include "memory.h"
-#include "error.h"
-#include "math.h"
-#include "update.h"
-#include "hsma2d.h"
-#include<iostream>
-#include <sstream>
-#include <fstream>
-#include"mkl.h"
-#include<omp.h>
 #include<iomanip>
-#include <immintrin.h> 
-#include "complex.h"
+
+#if defined(_OPENMP)
+#include<omp.h>
+#endif
+
+#if defined(__AVX512F__)
+#include <immintrin.h>
+#endif
+
+#if defined(LMP_USE_MKL_RNG)
+#include"mkl.h"
+#endif
 
 extern "C" {void lfmm3d_t_c_g_(double* eps, int* nsource, double* source, double* charge, int* nt, double* targ, double* pottarg, double* gradtarg, int* ier); }
 extern int fab(int n);
 extern int isfab(int m);
 
 using namespace LAMMPS_NS;
-using namespace std;
+using namespace MathConst;
+using namespace MathSpecial;
 
 HSMA2D::HSMA2D(LAMMPS* lmp) : KSpace(lmp)
 {
 	maxatom = atom->natoms;
-	MPI_Comm_rank(world, &me);
-	MPI_Comm_size(MPI_COMM_WORLD, &RankID);
+	me = comm->me;
+	RankID = comm->nprocs;
 	Lx = domain->xprd;
 	Ly = domain->yprd;
 	Lz = domain->zprd * slab_volfactor;
-	PI = 3.141592653589793;
+	PI = MY_PI;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -77,9 +88,11 @@ void HSMA2D::settings(int narg, char** arg)
 			update->ntimestep));
 		Lambda = 1.5;
 	}
+	if (atom->natoms > 214783648)
+		error->all(FLERR, "The current version of HSMA is not available for such big system.");
 	if (p < 1)
 		error->all(FLERR, "p shoule be >=1.");
-	if (p > 50) {
+	if (p > 50 && comm->me == 0) {
 		error->warning(FLERR, fmt::format("The p is too big! Please use a smaller p. Set p to the default value.",
 			update->ntimestep));
 		p = 6;
@@ -111,7 +124,7 @@ void HSMA2D::settings(int narg, char** arg)
 /* ---------------------------------------------------------------------- */
 void HSMA2D::init()
 {
-	printf("Setting up HSMA2D implemented by Jiuyang Liang (Release 1.0.0)\n");
+	utils::logmesg(lmp, "Setting up HSMA2D implemented by Jiuyang Liang (Release 1.0.0)\n");
 
 	Step = 0;
 	Time = new float[2000];
@@ -202,10 +215,14 @@ void HSMA2D::init()
 		QLocalRD[i]= new double[p * p];
 	}
 	SetFibonacci(Fibonacci, F, Fp, Np, Rs, PI);
-    #pragma omp parallel
-	{
+
+#if defined(_OPENMP)
+	#pragma omp parallel {
+#endif
 		double MulQ[p * p], MulLocalQ[p * p];
+		#if defined(_OPENMP)
         #pragma omp for schedule(static) private(MulQ,MulLocalQ)
+		#endif
 		for (int i = 0; i < Np; i++)
 		{
 			CalculateRDMultipoleExpansion(MulQ, p, Fibonacci[i][0], Fibonacci[i][1], Fibonacci[i][2]);
@@ -216,7 +233,9 @@ void HSMA2D::init()
 				QLocalRD[i][j] = MulLocalQ[j];
 			}
 		}
+#if defined(_OPENMP)	
 	}
+#endif
 
 	TopNear = new double* [S * Nw];
 	TopZDNear = new double* [S * Nw];
@@ -238,8 +257,6 @@ void HSMA2D::init()
 			AR[i * Nw + j] = ar[i][j];
 		}
 	}
-
-	cout << Lx << "=Lx   " << Ly << "=Ly    " << Lz << "=Lz   " << Lambda << "=Lambda    " <<Gamma<<"=Gamma    "<<w<<"=w    "<< p << "=p   " << Nw << "=Nw    " << Fp << "=Fp   " << F << "=F   " << IF_FMM_RightTerm << "=IF_FMM_RightTerm   " << IF_FMM_FinalPotential << "=IF_FMM_FinalPotential   " << endl;
 }
 
 void HSMA2D::compute(int eflag, int vflag)
@@ -254,9 +271,6 @@ void HSMA2D::compute(int eflag, int vflag)
 	// return if there are no charges
 	if (qsqsum == 0.0) return;
 
-	double time;
-	time = MPI_Wtime();
-
 	//Set interfaces
 	double** x = atom->x;
 	double* q = atom->q;
@@ -268,9 +282,6 @@ void HSMA2D::compute(int eflag, int vflag)
 
 	if (RankID == 1)
 	{
-		double time;
-		time = MPI_Wtime();
-
 		double X[nlocal][3], Q[nlocal], Force[nlocal][3], Pot[nlocal];
 		for (int i = 0; i < nlocal; i++)
 		{
@@ -429,18 +440,6 @@ void HSMA2D::compute(int eflag, int vflag)
 				for (int i = 0; i < nlocal; i++)
 					for (int j = 0; j < 6; j++) vatom[i][j] *= q[i] * qscale;
 		}
-	}
-
-	time = MPI_Wtime() - time;
-	int TotalStep = 100;
-	if (Step < TotalStep) { Time[Step] = time * 1000; }
-	Step++;
-	if (me == 0 && Step == TotalStep) {
-		ofstream outfile;
-		outfile.open("./Time_HSMA2D.txt");
-		for (int i = 0; i < TotalStep; i++)
-			outfile << Time[i] << endl;
-		outfile.close();
 	}
 }
 
@@ -661,12 +660,16 @@ void HSMA2D::ConstructLeftTerm(double** LeftTermReal, double** LeftTermImag, dou
 	double Q[S * Nw][S * Nw][p * p], QZD[S * Nw][S * Nw][p * p];
 	double DownQ[S * Nw][S * Nw][p * p], DownQZD[S * Nw][S * Nw][p * p];
 
-
-#pragma omp parallel 
+#if defined(_OPENMP)
+	#pragma omp parallel 
 	{
+#endif
 		double QM[p * p], QZDM[p * p];
 		int index_r, index_dr;
-#pragma omp for schedule(static) private(QM,QZDM)
+
+	    #if defined(_OPENMP)
+		#pragma omp for schedule(static) private(QM,QZDM)
+		#endif
 		for (int m = 0; m < S * Nw; m++)
 			for (int n = 0; n < S * Nw; n++)
 			{
@@ -690,7 +693,9 @@ void HSMA2D::ConstructLeftTerm(double** LeftTermReal, double** LeftTermImag, dou
 		double Vec1, Vec2, Vec3, Vec4, I1, I2, I3, I4, EQ1, EQ2, EQ3, EQ4;
 		int Up, Down;
 
-#pragma omp for schedule(static)
+		#if defined(_OPENMP)
+		#pragma omp for schedule(static)
+		#endif
 		for (int j = -NJKBound; j <= NJKBound; j++)
 			for (int k = -NJKBound; k <= NJKBound; k++)
 			{
@@ -735,21 +740,14 @@ void HSMA2D::ConstructLeftTerm(double** LeftTermReal, double** LeftTermImag, dou
 						}
 					}
 			}
-
+#if defined(_OPENMP)
 	}
-
+#endif
 }
 
 double HSMA2D::fac(double t)//calculate factorial
 {
-	double s;
-	if (abs(t - 1) < 0.001 || abs(t) < 0.001)
-		s = 1.0;
-	else
-	{
-		s = t * fac(t - 1) + 0.00;
-	}
-	return s;
+	return factorial(int(t));
 }
 
 void HSMA2D::CalculateRDMultipoleExpansion(double* Q, int p, double x, double y, double z)
@@ -799,7 +797,7 @@ void HSMA2D::CalculateRDMultipoleExpansion(double* Q, int p, double x, double y,
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -859,7 +857,7 @@ void HSMA2D::CalculateLocalRDMultipoleExpansion(double* Q, int p, double x, doub
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -907,7 +905,7 @@ void HSMA2D::CalculateMultipoleExpansion(double* Q, int p, double x, double y, d
 	}
 
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!      
+	t = 0;//normlization      
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -985,7 +983,7 @@ void HSMA2D::CalculateZDerivativeMultipoleExpansion(double* Q, int p, double x, 
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -1064,7 +1062,7 @@ void HSMA2D::CalculateXDMultipoleExpansion(double* Q, int p, double x, double y,
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -1142,7 +1140,7 @@ void HSMA2D::CalculateYDMultipoleExpansion(double* Q, int p, double x, double y,
 		}
 	}
 
-	t = 0;//normlization     Please do not normlize after every step!! That's wrong!
+	t = 0;//normlization 
 	for (int i = 0; i < p; i++)
 	{
 		while (t < (i + 1) * (i + 1))
@@ -1291,7 +1289,9 @@ void HSMA2D::CalculateNearFieldAndZD(double** Top, double** TopZD, double** Down
 			Paramet1[i] = ImageCharge[i][3] * pow(Gamma, fabs(ImageCharge[i][4]) + 0.00);
 		}
 		
+#if defined(_OPENMP)
         #pragma omp parallel
+#endif
 		{
 			int id = omp_get_thread_num();
 			int size = omp_get_num_threads();
