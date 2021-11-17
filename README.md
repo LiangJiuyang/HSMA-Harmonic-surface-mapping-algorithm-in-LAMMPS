@@ -102,7 +102,7 @@ To set the number of OpenMP threads per MPI, please type
 ```
 export OMP_NUM_THREADS=10
 ```
-in the command line or dynamiclly set in the code (not recommand).
+in the command line or dynamiclly set in the code (not recommend).
 
 To run the input script, an example is cd ./HSMA_Example and then type
 ```
