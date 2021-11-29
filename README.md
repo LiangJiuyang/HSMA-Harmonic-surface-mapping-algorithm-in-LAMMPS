@@ -4,7 +4,7 @@
 ## Installation
 For employing HSMA3D after download this full package, the first thing is to include the HSMA package and other appropriate packages in your LAMMPS (cd ./src catalogue):
 ```
-make yes-hsma yes-molecule yes-manybody yes-kspace
+make yes-molecule yes-manybody yes-kspace yes-hsma
 ```
 
 We recommend to install 'OPENMP' package for the better performance of the evaluation of the LJ potential:
