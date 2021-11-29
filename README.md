@@ -110,9 +110,9 @@ salt_3-1.in : 3:1 electrolyte solution (3D)
 
 To set the number of OpenMP threads per MPI, please type
 ```
-export OMP_NUM_THREADS=10
+export OMP_NUM_THREADS=40
 ```
-in the command line or dynamiclly set in the code (not recommend). Here `10` should be the number of threads of your machine.
+in the command line or dynamiclly set in the code (not recommend). Here `40` should be the number of threads of your machine. Note that this is also set in the beginning of the input script. Please refer to the annotation given in the input files in `HSMA-Harmonic-surface-mapping-algorithm-in-LAMMPS/HSMA_Example`.
 
 To run the input script, an example is cd ./HSMA_Example and then type
 ```
