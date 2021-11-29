@@ -27,6 +27,13 @@ PKG_SYSLIB =
 PKG_SYSPATH = 
 ```
 
+Next, compile the FMM library under ./src/HSMA/OFile catalogue using
+```
+unzip HSMA1.0.0.zip
+make all
+```
+Note that the default setting is to use `OpenMP` and `gcc`. We also offer command `OMP=OFF` to exclude OpenMP, and `ICC=ON` to replace `gcc` by Intel compiler `icc`, respectively. 
+
 Finally, compile the LAMMPS under ./src catalogue using
 ```
 make intel_cpu_intelmpi
@@ -88,7 +95,7 @@ For more details of parameter setting, please refer to our JCP papers which cont
 Note that the 'pair style' should be set as 'lj/cut' (or lj/cut/omp, we recommend using user-omp package in Lammps) if you want to evaluate LJ potential. Please do not use pair styles which are combined with the near part of a Coulomb solver, such as'lj/cut/coul/long', etc. 
 
 ## Examples
-Some examples of in-file are provided in the folder `HSMA_Example`.
+Some examples of in-file are provided in the folder `HSMA-Harmonic-surface-mapping-algorithm-in-LAMMPS/HSMA_Example`.
 ```
 salt_1-1.in : 1:1 electrolyte solution (3D)
 
@@ -122,7 +129,7 @@ If you use this package in your work and feel that this package is helpful to yo
 2. [J. Liang, J. Yuan, E. Luijten, and Z. Xu, J. Chem. Phys. 152, 134109 (2020).](https://aip.scitation.org/doi/10.1063/5.0003293)
 3. [J. Liang, J. Yuan, and Z. Xu, preprint (2021).](https://arxiv.org/abs/2104.05260)
 
-This version still need optimization. If you have any questions and suggestions, please send a email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
+This version still need optimization. If you have any questions and suggestions, please send an email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
 
 Good luck to all of you!
 
