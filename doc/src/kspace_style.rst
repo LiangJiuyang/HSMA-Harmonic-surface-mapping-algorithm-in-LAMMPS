@@ -2,6 +2,7 @@
 .. index:: kspace_style ewald/dipole
 .. index:: kspace_style ewald/dipole/spin
 .. index:: kspace_style ewald/disp
+.. index:: kspace_style ewald/disp/dipole
 .. index:: kspace_style ewald/omp
 .. index:: kspace_style pppm
 .. index:: kspace_style pppm/kk
@@ -9,6 +10,7 @@
 .. index:: kspace_style pppm/gpu
 .. index:: kspace_style pppm/intel
 .. index:: kspace_style pppm/cg
+.. index:: kspace_style pppm/dielectric
 .. index:: kspace_style pppm/dipole
 .. index:: kspace_style pppm/dipole/spin
 .. index:: kspace_style pppm/disp
@@ -16,6 +18,7 @@
 .. index:: kspace_style pppm/disp/tip4p
 .. index:: kspace_style pppm/disp/tip4p/omp
 .. index:: kspace_style pppm/disp/intel
+.. index:: kspace_style pppm/disp/dielectric
 .. index:: kspace_style pppm/cg/omp
 .. index:: kspace_style pppm/stagger
 .. index:: kspace_style pppm/tip4p
@@ -24,7 +27,10 @@
 .. index:: kspace_style msm/omp
 .. index:: kspace_style msm/cg
 .. index:: kspace_style msm/cg/omp
+.. index:: kspace_style msm/dielectric
 .. index:: kspace_style scafacos
+.. index:: kspace_style hsma3d
+.. index:: kspace_style hsma2d
 
 kspace_style command
 ====================
@@ -36,7 +42,7 @@ Syntax
 
    kspace_style style value
 
-* style = *none* or *ewald* or *ewald/dipole* or *ewald/dipole/spin* or *ewald/disp* or *ewald/omp* or *pppm* or *pppm/cg* or *pppm/disp* or *pppm/tip4p* or *pppm/stagger* or *pppm/disp/tip4p* or *pppm/gpu* or *pppm/intel* or *pppm/disp/intel* or *pppm/kk* or *pppm/omp* or *pppm/cg/omp* or *pppm/disp/tip4p/omp* or *pppm/tip4p/omp* or *msm* or *msm/cg* or *msm/omp* or *msm/cg/omp* or *scafacos*
+* style = *none* or *ewald* or *ewald/dipole* or *ewald/dipole/spin* or *ewald/disp* or *ewald/disp/dipole* or *ewald/omp* or *pppm* or *pppm/cg* or *pppm/disp* or *pppm/tip4p* or *pppm/stagger* or *pppm/disp/tip4p* or *pppm/gpu* or *pppm/intel* or *pppm/disp/intel* or *pppm/kk* or *pppm/omp* or *pppm/cg/omp* or *pppm/disp/tip4p/omp* or *pppm/tip4p/omp* or *pppm/dielectic* or *pppm/disp/dielectric* or *msm* or *msm/cg* or *msm/omp* or *msm/cg/omp* or *msm/dielectric* or *scafacos* or *hsma3d* or *hsma2d*
 
   .. parsed-literal::
 
@@ -48,6 +54,8 @@ Syntax
        *ewald/dipole/spin* value = accuracy
          accuracy = desired relative error in forces
        *ewald/disp* value = accuracy
+         accuracy = desired relative error in forces
+       *ewald/disp/dipole* value = accuracy
          accuracy = desired relative error in forces
        *ewald/omp* value = accuracy
          accuracy = desired relative error in forces
@@ -87,6 +95,10 @@ Syntax
          accuracy = desired relative error in forces
        *pppm/stagger* value = accuracy
          accuracy = desired relative error in forces
+       *pppm/dielectric* value = accuracy
+         accuracy = desired relative error in forces
+       *pppm/disp/dielectric* value = accuracy
+         accuracy = desired relative error in forces
        *msm* value = accuracy
          accuracy = desired relative error in forces
        *msm/cg* value = accuracy (smallq)
@@ -97,9 +109,28 @@ Syntax
        *msm/cg/omp* value = accuracy (smallq)
          accuracy = desired relative error in forces
          smallq = cutoff for charges to be considered (optional) (charge units)
+       *msm/dielectric* value = accuracy
+         accuracy = desired relative error in forces
        *scafacos* values = method accuracy
          method = fmm or p2nfft or p3m or ewald or direct
          accuracy = desired relative error in forces
+       *hsma3d* values =  εtol λ P Nm Fw F f1 f2
+         εtol = desired error of the FMM or the direct summation
+         λ = the relative ratio of the radius of the auxiliary surface and the diagonal length of the simulation box
+         P = the total number of spherical basis
+         Nm =  the number of monitoring points
+         Fw & F = two adjacent integers in the Fibonacci sequence 
+         f1 = integers indicating whether using the FMM or not when calculating the potential at the monitoring points 
+         f2 = integers indicating whether using the FMM or not when calculating the near-field potential at the source points
+        *hsma2d* values =  εtol λ γ P Nw W Fw F f1 f2
+         εtol = desired error of the FMM or the direct summation
+         λ = the relative ratio of the radius of the auxiliary surface and the diagonal length of the simulation box
+         γ = the dielectric mismatch [-1,1]
+         P = the total number of spherical basis
+         Nw & W =   two integers used in the surface integral that the total number of quadratures along X and Y dimensions as Nw·floor(W^(1/2))
+         Fw & F = two adjacent integers in the Fibonacci sequence 
+         f1 = integers indicating whether using the FMM or not when calculating the potential at the monitoring points 
+         f2 = integers indicating whether using the FMM or not when calculating the near-field potential at the source points
 
 Examples
 """"""""
@@ -111,6 +142,14 @@ Examples
    kspace style msm 1.0e-4
    kspace style scafacos fmm 1.0e-4
    kspace_style none
+   kspace_style hsma3d 1e-4 1.2 8 128 55 89 0 0
+   kspace_style hsma2d 1e-4 1.5 0.94 6 40 4 55 89 1 0
+
+Used in input scripts:
+
+   .. parsed-literal::
+
+      examples/peptide/in.peptide
 
 Description
 """""""""""
@@ -141,6 +180,8 @@ matching keyword to the name of the KSpace style, as in this table:
 +----------------------+-----------------------+
 | tip4p/long           | tip4p                 |
 +----------------------+-----------------------+
+| dipole/long          | dipole                |
++----------------------+-----------------------+
 
 ----------
 
@@ -153,7 +194,8 @@ The *ewald/disp* style adds a long-range dispersion sum option for
 but in a more efficient manner than the *ewald* style.  The :math:`1/r^6`
 capability means that Lennard-Jones or Buckingham potentials can be
 used without a cutoff, i.e. they become full long-range potentials.
-The *ewald/disp* style can also be used with point-dipoles, see
+
+The *ewald/disp/dipole* style can also be used with point-dipoles, see
 :ref:`(Toukmaji) <Toukmaji>`.
 
 The *ewald/dipole* style adds long-range standard Ewald summations
@@ -278,7 +320,7 @@ pressure simulation with MSM will cause the code to run slower.
 ----------
 
 The *scafacos* style is a wrapper on the `ScaFaCoS Coulomb solver library <http://www.scafacos.de>`_ which provides a variety of solver
-methods which can be used with LAMMPS.  The paper by :ref:`(Who) <Who2012>`
+methods which can be used with LAMMPS.  The paper by :ref:`(Sutman) <Sutmann2014>`
 gives an overview of ScaFaCoS.
 
 ScaFaCoS was developed by a consortium of German research facilities
@@ -289,12 +331,12 @@ Forschungszentrum Juelich.
 
 The library is available for download at "http://scafacos.de" or can
 be cloned from the git-repository
-"git://github.com/scafacos/scafacos.git".
+"https://github.com/scafacos/scafacos.git".
 
 In order to use this KSpace style, you must download and build the
-ScaFaCoS library, then build LAMMPS with the USER-SCAFACOS package
+ScaFaCoS library, then build LAMMPS with the SCAFACOS package
 installed package which links LAMMPS to the ScaFaCoS library.
-See details on :ref:`this page <USER-SCAFACOS>`.
+See details on :ref:`this page <SCAFACOS>`.
 
 .. note::
 
@@ -334,6 +376,42 @@ the :doc:`kspace_modify scafacos accuracy <kspace_modify>` doc page.
 
 The :doc:`kspace_modify scafacos <kspace_modify>` command also explains
 other ScaFaCoS options currently exposed to LAMMPS.
+
+----------
+
+The *hsma3d* style invokes a harmonic surface mapping algorithm :ref:`(Zhao) <Zhao2018>`
+which is an efficient solver for full periodic systems. This algorithm first introduces an auxiliary
+surface such that the contribution of images outside  the surface can be approximated by
+the least-squares method using spherical harmonics as basis functions.
+The so-called harmonic surface mapping is the procedure to transform the approximate
+solution into a surface charge and a surface dipole over the auxiliary surface, which becomes
+point images by using numerical integration. The algorithm can be further accelerated by the FMM.
+
+The *hsma2d* style invokes a harmonic surface mapping algorithm :ref:`(Liang20) <Liang2020>`
+for molecular dynamics simulations of charged particles confined by planar dielectric interfaces.
+We approximate the electrostatic potential of far-field charges via spherical harmonic expansion
+and determine the coefficients by fitting the Dirichlet-to-Neumann boundary condition, which
+only requires the potential within the simulation cell. Instead of performing the direct evaluation
+of spherical harmonic series expansion, we use Green’s second identity to transform the series
+expansion into a spherical integral, which can be accurately represented by discrete charges on the sphere.
+
+Both the HSMA3D and HSMA2D solvers scale as O(N) due to the FMMs, or :math:`O(N^2)`
+due to the direct summation. In the current version, the HSMA3D and the HSMA2D depend on
+many of parameters. We refer to :ref:`(Liang21) <Liang2021>` for more details about parameters
+selection. In the next version, we will do systematic tests and remove these parameter except the
+relative accuracy which is like other KSpace solvers.
+
+The library is also available for download at "https://github.com/LiangJiuyang/HSMA-Harmonic-surface-mapping-algorithm-in-LAMMPS".
+
+.. note::
+
+   Unlike other KSpace solvers in LAMMPS, HSMA3D and HSMA2D computes all
+   Coulombic interactions, both short- and long-range.  Thus you should
+   NOT use a Coulombic pair style when using kspace_style hsma3d or hsma2d.  This
+   also means the total Coulombic energy (short- and long-range) will be
+   tallied for :doc:`thermodynamic output <thermo_style>` command as part
+   of the *elong* keyword; the *epair* keyword will not contain the short-range part
+   of the Coulomb.
 
 ----------
 
@@ -393,33 +471,26 @@ relative RMS error.
 
 ----------
 
-Styles with a *gpu*\ , *intel*\ , *kk*\ , *omp*\ , or *opt* suffix are
-functionally the same as the corresponding style without the suffix.
-They have been optimized to run faster, depending on your available
-hardware, as discussed on the :doc:`Speed packages <Speed_packages>` doc
-page.  The accelerated styles take the same arguments and should
-produce the same results, except for round-off and precision issues.
+.. include:: accel_styles.rst
 
-More specifically, the *pppm/gpu* style performs charge assignment and
-force interpolation calculations on the GPU.  These processes are
-performed either in single or double precision, depending on whether
-the -DFFT_SINGLE setting was specified in your low-level Makefile, as
-discussed above.  The FFTs themselves are still calculated on the CPU.
-If *pppm/gpu* is used with a GPU-enabled pair style, part of the PPPM
-calculation can be performed concurrently on the GPU while other
-calculations for non-bonded and bonded force calculation are performed
-on the CPU.
+.. note::
 
-The *pppm/kk* style performs charge assignment and force interpolation
-calculations, along with the FFTs themselves, on the GPU or (optionally) threaded
-on the CPU when using OpenMP and FFTW3.
+  For the GPU package, the *pppm/gpu* style performs charge assignment
+  and force interpolation calculations on the GPU.  These processes
+  are performed either in single or double precision, depending on
+  whether the -DFFT_SINGLE setting was specified in your low-level
+  Makefile, as discussed above.  The FFTs themselves are still
+  calculated on the CPU.  If *pppm/gpu* is used with a GPU-enabled
+  pair style, part of the PPPM calculation can be performed
+  concurrently on the GPU while other calculations for non-bonded and
+  bonded force calculation are performed on the CPU.
 
-These accelerated styles are part of the GPU, USER-INTEL, KOKKOS,
-USER-OMP, and OPT packages respectively.  They are only enabled if
-LAMMPS was built with those packages.  See the :doc:`Build package <Build_package>` doc page for more info.
+.. note::
 
-See the :doc:`Speed packages <Speed_packages>` doc page for more
-instructions on how to use the accelerated styles effectively.
+  For the KOKKOS package, the *pppm/kk* style performs charge
+  assignment and force interpolation calculations, along with the FFTs
+  themselves, on the GPU or (optionally) threaded on the CPU when
+  using OpenMP and FFTW3.
 
 ----------
 
@@ -430,13 +501,19 @@ Note that the long-range electrostatic solvers in LAMMPS assume conducting
 metal (tinfoil) boundary conditions for both charge and dipole
 interactions. Vacuum boundary conditions are not currently supported.
 
-The *ewald/disp*\ , *ewald*\ , *pppm*\ , and *msm* styles support
+The *ewald/disp*, *ewald*, *pppm*, and *msm* styles support
 non-orthogonal (triclinic symmetry) simulation boxes. However,
 triclinic simulation cells may not yet be supported by all suffix
 versions of these styles.
 
-All of the kspace styles are part of the KSPACE package.  They are
-only enabled if LAMMPS was built with that package.  See the :doc:`Build package <Build_package>` doc page for more info.
+Most of the base kspace styles are part of the KSPACE package.  They are
+only enabled if LAMMPS was built with that package.  See the :doc:`Build
+package <Build_package>` page for more info.
+
+The *msm/dielectric* and *pppm/dielectric* kspace styles are part of the
+DIELECTRIC package. They are only enabled if LAMMPS was built with
+that package **and** the KSPACE package.  See the :doc:`Build package
+<Build_package>` page for more info.
 
 For MSM, a simulation must be 3d and one can use any combination of
 periodic, non-periodic, or shrink-wrapped boundaries (specified using
@@ -448,10 +525,10 @@ dimensions.  The only exception is if the slab option is set with
 must be periodic and the z dimension must be non-periodic.
 
 The scafacos KSpace style will only be enabled if LAMMPS is built with
-the USER-SCAFACOS package.  See the :doc:`Build package <Build_package>`
+the SCAFACOS package.  See the :doc:`Build package <Build_package>`
 doc page for more info.
 
-The use of ScaFaCos in LAMMPS does not yet support molecular charged
+The use of ScaFaCos and HSMA in LAMMPS does not yet support molecular charged
 systems where the short-range Coulombic interactions between atoms in
 the same bond/angle/dihedral are weighted by the
 :doc:`special_bonds <special_bonds>` command.  Likewise it does not
@@ -550,7 +627,19 @@ Illinois at Urbana-Champaign, (2006).
 
 **(Cerda)** Cerda, Ballenegger, Lenz, Holm, J Chem Phys 129, 234104 (2008)
 
-.. _Who2012:
+.. _Sutmann2014:
 
-**(Who)** Who, Author2, Author3, J of Long Range Solvers, 35, 164-177
-(2012).
+**(Sutmann)** G. Sutmann. ScaFaCoS - a Scalable library of Fast Coulomb Solvers for particle Systems.
+  In Bajaj, Zavattieri, Koslowski, Siegmund, Proceedings of the Society of Engineering Science 51st Annual Technical Meeting. 2014.
+
+.. _Zhao2018:
+
+**(Zhao18)** Q. Zhao, J. Liang, and Z. Xu. J. Chem. Phys. 149, 084111 (2018).
+
+.. _Liang2020:
+
+**(Liang20)** J. Liang, J. Yuan, E. Luijten, and Z. Xu, J. Chem. Phys. 152, 134109 (2020).
+
+.. _Liang2021:
+
+**(Liang21)** J. Liang, J. Yuan, and Z. Xu, arXiv:2104.05260 (2021).

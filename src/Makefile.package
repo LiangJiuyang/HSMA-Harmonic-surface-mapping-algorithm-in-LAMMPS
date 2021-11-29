@@ -1,0 +1,13 @@
+# Settings for libraries used by specific LAMMPS packages
+# this file is auto-edited when those packages are included/excluded
+SOURCE=$(wildcard ../HSMA/OFile/*.o) 
+
+PKG_INC =   
+PKG_PATH =    $(SOURCE) -lgfortran -ldl 
+PKG_LIB =   
+PKG_CPP_DEPENDS = 
+PKG_LINK_DEPENDS = 
+
+PKG_SYSINC =  
+PKG_SYSLIB =  
+PKG_SYSPATH = 

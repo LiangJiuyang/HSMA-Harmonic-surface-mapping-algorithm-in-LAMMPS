@@ -2,21 +2,21 @@
 [HSMA3D](https://aip.scitation.org/doi/10.1063/1.5044438) and [HSMA2D](https://aip.scitation.org/doi/10.1063/5.0003293) (with planar dielectric interfaces) have been implemented into LAMMPS as a k-space module. This module is written via C++ and is paralleled via MPI + OpenMP. We recommend user install 'user-omp' package in Lammps. Fewer MPIs and more OpenMPs are the most efficient choice. We suggest not to use pure MPI. With optimal choice of parameters, the speed of this package is comparable to PPPM (with Intel optimization) in LAMMPS, or even faster than it. 
 
 ## Installation
-For employing HSMA3D after download this full package, the first thing is to include the USER-HSMA package and other appropriate packages in your LAMMPS (cd ./src catalogue):
+For employing HSMA3D after download this full package, the first thing is to include the HSMA package and other appropriate packages in your LAMMPS (cd ./src catalogue):
 ```
-make yes-user-hsma yes-molecule yes-manybody yes-kspace
-```
-
-We recommend to install 'USER-OMP' package for the better performance of the evaluation of the LJ potential:
-```
-make yes-user-omp
+make yes-hsma yes-molecule yes-manybody yes-kspace
 ```
 
-Then, copy following commands into the `src/Makefile.package` file (overwrite the origin file) : 
+We recommend to install 'OPENMP' package for the better performance of the evaluation of the LJ potential:
+```
+make yes-openmp
+```
+
+Then, check if following commands is written into the `src/Makefile.package` file : 
 ```
 # Settings for libraries used by specific LAMMPS packages
 # this file is auto-edited when those packages are included/excluded
-SOURCE = $(wildcard ../USER-HSMA/OFile/* .o)
+SOURCE = $(wildcard ../HSMA/OFile/*.o)
 PKG_INC =   -DLMP_USER_OMP 
 PKG_PATH =  $(SOURCE) -lgfortran -ldl
 PKG_LIB =   
@@ -27,86 +27,96 @@ PKG_SYSLIB =
 PKG_SYSPATH = 
 ```
 
+Next, compile the FMM library under ./src/HSMA/OFile catalogue using
+```
+unzip HSMA1.0.0.zip
+make all
+```
+Note that the default setting is to use `OpenMP` and `gcc`. We also offer command `OMP=OFF` to exclude OpenMP, and `ICC=ON` to replace `gcc` by Intel compiler `icc`, respectively. 
+
 Finally, compile the LAMMPS under ./src catalogue using
 ```
 make intel_cpu_intelmpi
 ```
+or other available options (we recommend to use 'make intel_cpu_intelmpi').
 
-Note that if you want to use HSMA with your own LAMMPS, please just copy /src/USER-HSMA to your lammps/src catalogue, and then refer to the same installation procedure listed in this part.
+Note that if you want to use HSMA with your own LAMMPS, please just copy /src/HSMA to your lammps/src catalogue, and then refer to the same installation procedure listed in this part.
 
 ## User guide
 For employing HSMA3D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
 ```
-kspace_style HSMA3D 1.0e-3 1.3 8 128 55.0 89.0 0 0
+kspace_style HSMA3D 1.0e-4 1.2 8 128 55.0 89.0 0 0
 ```
 
 The first two parameters don't need to modify. Just keep them as `"kspace_style HSMA".`
 
-1.0e-3 : the tolerance of FMM or directly compute.  
+1.0e-4 : the tolerance of FMM or directly compute.  
 
-1.3 : If the dimensions of simulation box are Lx=Ly=Lz=100, then this parameter means that one find all the images within a sphere with radius 1.3 * sqrt(LxLx+LyLy+LzLz)
+1.2 : If the dimensions of simulation box are Lx=Ly=Lz=100, then this parameter means that one find all the images within a sphere with radius 1.2 * sqrt(LxLx+LyLy+LzLz)
 .   
 
 8 : means that the number of basis is 8*8=64.  
 
 128 : the number of monitoring points.  
 
-55.0 and 89.0 : the parameters of Fibonacci quadrature. One can set these two numbers as two adjacent Fibonacci numbers, like "89.0 144.0" or "144.0 233.0".
+55.0 and 89.0 : the parameters of Fibonacci quadrature. In most cases, 55 and 89 are sufficient so that the relative error of spherical integration is less than 1e−5 (by the rule of thumb). One can set these two numbers as two adjacent Fibonacci numbers, like "89.0 144.0" or "144.0 233.0".
 
-1 : Indicate if one employs FMM (O(N)) to evaluate the potential of near-field. "0" indicates directly computing which has O(N^2) complexity.
+0 (first) : Indicate if one employs FMM (O(N)) to evaluate the potential of near-field. "0" indicates directly computing which has O(N^2) complexity.
 
-0 : Indicate if one employs FMM (O(N)) to evaluate the potential of far-field. "0" indicates directly computing which has O(N^2) complexity.
+0 (second) : Indicate if one employs FMM (O(N)) to evaluate the potential of far-field. "0" indicates directly computing which has O(N^2) complexity.
 
 For employing HSMA2D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
 ```
-kspace_style HSMA2D 1.0e-3 1.5 0.0 6 40 16 55.0 89.0 1 0
+kspace_style HSMA2D 1.0e-3 1.5 0.939 6 40 16 55.0 89.0 1 0
 ```  
 The first two parameters don't need to modify. Just keep them as `"kspace_style HSMA2D".`  
 
 1.0e-3 : the tolerance of FMM or directly compute.  
 
-1.5 : If the dimensions of simulation box are Lx=Ly=Lz=100, then this parameter means that one find all the images within a sphere with radius 1.3 * sqrt(Lx*Lx+Ly*Ly+Lz*Lz)
+1.5 : If the dimensions of simulation box are Lx=Ly=Lz=100, then this parameter means that one find all the images within a sphere with radius 1.5 * sqrt(Lx*Lx+Ly*Ly+Lz*Lz)
 .  
 
-0.00 : the dielectric mismatch. The range of mismatch is [-1,1]
+0.00 : the dielectric mismatch. The range of mismatch is [-1,1].
   
 6 : means that the number of basis is 6*6=36. 
 
-40 : the number of Gaussian quadratures.  
+40 : the number of Gaussian quadratures. In the current version, this parameter could be selected from {2,3,5,8,10,15,20,30,40,50,60,70,80,90,100,120,160,240,320,480}.   
 
 16 : the parameter "w" in our paper (relative to the 2D dilation quadrature).
 
-55.0 and 89.0 : the parameters of Fibonacci quadrature. One can set these two numbers as two adjacent Fibonacci numbers, like "89.0 144.0" or "144.0 233.0".
+55.0 and 89.0 : the parameters of Fibonacci quadrature. In most cases, 55 and 89 are sufficient so that the relative error of spherical integration is less than 1e−5 (by the rule of thumb). One can set these two numbers as two adjacent Fibonacci numbers, like "89.0 144.0" or "144.0 233.0".
 
 1 : Indicate if one employs FMM (O(N)) to evaluate the potential of near-field. "0" indicates directly computing which has O(N^2) complexity.
 
 0 : Indicate if one employs FMM (O(N)) to evaluate the potential of far-field. "0" indicates directly computing which has O(N^2) complexity.
 
-For more details of parameter setting, please refer to our SCI papers which contain the set of parameter within given accuracy. 
+For more details of parameter setting, please refer to our JCP papers which contain the set of parameter within given accuracy. 
 
 Note that the 'pair style' should be set as 'lj/cut' (or lj/cut/omp, we recommend using user-omp package in Lammps) if you want to evaluate LJ potential. Please do not use pair styles which are combined with the near part of a Coulomb solver, such as'lj/cut/coul/long', etc. 
 
 ## Examples
-Some examples of in-file are provided in the folder `HSMA_Example`.
+Some examples of in-file are provided in the folder `HSMA-Harmonic-surface-mapping-algorithm-in-LAMMPS/HSMA_Example`.
 ```
-salt_1-1.in : 1:1 electrolyte solution
+salt_1-1.in : 1:1 electrolyte solution (3D)
 
-salt_2-1.in : 2:1 electrolyte solution
+salt_2-1.in : 2:1 electrolyte solution (3D)
 
-salt_3-1.in : 3:1 electrolyte solution
+salt_3-1.in : 3:1 electrolyte solution (3D)
 
-SPCE_Water.spce-bulk-nvt : the SPCE water system (17496 atoms)
+2d_salt_2-1.in : 2:1 electrolyte solution (2D with dielectric mismatch)
+
+2d_salt_3-1.in : 3:1 electrolyte solution (2D with dielectric mismatch)
 ```
 
 To set the number of OpenMP threads per MPI, please type
 ```
-export OMP_NUM_THREADS=10
+export OMP_NUM_THREADS=40
 ```
-in the command line or dynamiclly set in the code (not recommend).
+in the command line or dynamiclly set in the code (not recommend). Here `40` should be the number of threads of your machine. Note that this is also set in the beginning of the input script. Please refer to the annotation given in the input files in `HSMA-Harmonic-surface-mapping-algorithm-in-LAMMPS/HSMA_Example`.
 
 To run the input script, an example is cd ./HSMA_Example and then type
 ```
-srun --mpi=pmi2 ../src/lmp_intel_cpu_intelmpi -i salt_3-1.in
+srun --mpi=pmi2 -n 1 ../src/lmp_intel_cpu_intelmpi -i salt_3-1.in
 ```
 in the command line and hit Enter.
 
@@ -119,7 +129,7 @@ If you use this package in your work and feel that this package is helpful to yo
 2. [J. Liang, J. Yuan, E. Luijten, and Z. Xu, J. Chem. Phys. 152, 134109 (2020).](https://aip.scitation.org/doi/10.1063/5.0003293)
 3. [J. Liang, J. Yuan, and Z. Xu, preprint (2021).](https://arxiv.org/abs/2104.05260)
 
-This version still need optimization. If you have any questions and suggestions, please send a email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
+This version still need optimization. If you have any questions and suggestions, please send an email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
 
 Good luck to all of you!
 
