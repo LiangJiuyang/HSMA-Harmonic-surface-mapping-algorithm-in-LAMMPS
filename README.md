@@ -38,7 +38,7 @@ Finally, compile the LAMMPS under ./src catalogue using
 ```
 make intel_cpu_intelmpi
 ```
-or other available options (we recommend to use 'make intel_cpu_intelmpi').
+which is our recommendation.
 
 Note that if you want to use HSMA with your own LAMMPS, please just copy /src/HSMA to your lammps/src catalogue, and then refer to the same installation procedure listed in this part.
 
