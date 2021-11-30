@@ -14,7 +14,7 @@ create_atoms 2 random 1000 536 middle # 536 is a random seed
 
 variable temperature equal 1.2
 variable epsilon equal 0.285714
-variable coul_cut equal 10.0
+variable coul_cut equal 10.0 # should not become larger than min{Lx/2, Ly/2, Lz/2}
 group ani type 1
 group cat type 2
 mass 1 1
