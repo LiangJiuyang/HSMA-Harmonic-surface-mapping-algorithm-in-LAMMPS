@@ -38,7 +38,7 @@ Finally, compile the LAMMPS under ./src catalogue using
 ```
 make intel_cpu_intelmpi
 ```
-which is our recommendation.
+which is our recommendation. Other options are also OK like `make omp`, but one should add the dependency `-fopenmp -lmkl_rt` in the end of `PKG_PATH` in `src/Makefile.package` file.
 
 Note that if you want to use HSMA with your own LAMMPS, please just copy /src/HSMA to your lammps/src catalogue, and then refer to the same installation procedure listed in this part.
 
