@@ -417,10 +417,12 @@ The library is also available for download at "https://github.com/LiangJiuyang/H
 
    The HSMA package requires to compile the library for the use of FMM. 
    Please compile the FMM library under ./src/HSMA/OFile catalogue using
+   
    ```
    unzip HSMA1.0.0.zip
    make all
    ```
+   
    Note that the default setting is to use OpenMP and gcc. We also offer
    command OMP=OFF to exclude OpenMP, and ICC=ON to replace gcc by Intel
    compiler icc, respectively.
