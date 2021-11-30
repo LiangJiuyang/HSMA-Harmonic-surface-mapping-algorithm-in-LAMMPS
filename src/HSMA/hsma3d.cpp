@@ -26,6 +26,7 @@
 #include "math_const.h"
 #include "math_special.h"
 #include "memory.h"
+#include "mkl.h" // In this version, we require this library for solving the least square problem
 #include "update.h"
 
 #include <cstdio>
@@ -39,10 +40,6 @@
 
 #if defined(__AVX512F__)
 #include <immintrin.h>
-#endif
-
-#if defined(LMP_USE_MKL_RNG)
-#include"mkl.h"
 #endif
 
 extern "C" {void lfmm3d_t_c_g_(double *eps, int *nsource,double *source, double *charge, int *nt, double *targ, double *pottarg, double *gradtarg, int *ier);}
@@ -1058,15 +1055,11 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 				}
 			}
 #else
-			float Paramet1[ImageNumber];
+			float Paramet[ImageNumber];
 			for (int i = 0; i < ImageNumber; i++)
 			{
-				Paramet1[i] = ImageCharge[i][3];
+				Paramet[i] = ImageCharge[i][3];
 			}
-			double Paramet[ImageNumber];
-			memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
-			double Image[ImageNumber][4];
-			memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
 			float pottarg, fldtarg, pottarg2, fldtarg2;
 			float deltax, deltay, delta;
 			float deltaz;
@@ -1075,10 +1068,8 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 	#if defined(_OPENMP)
 		#pragma omp parallel for
 	#endif
-			for (int i0 = 0; i0 < Nw; i0 += 20)
+			for (int i = 0; i < Nw; i++)
 			{
-				for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
-				{
 					pottarg = 0.00;
 					fldtarg = 0.00;
 					pottarg2 = 0.00;
@@ -1086,20 +1077,19 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 					float Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
 					for (int j = 0; j < ImageNumber; j++)
 					{
-						deltax = Copy1 - Image[j][0];
-						deltay = Copy2 - Image[j][1];
-						deltaz = Copy3 - Image[j][2];
+						deltax = Copy1 - ImageCharge[j][0];
+						deltay = Copy2 - ImageCharge[j][1];
+						deltaz = Copy3 - ImageCharge[j][2];
 						float Para = Paramet[j];
 						delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
 						pottarg = pottarg + Para / delta;
-						deltax1 = Copy4 - Image[j][0];
-						deltay1 = Copy5 - Image[j][1];
-						deltaz1 = Copy6 - Image[j][2];
+						deltax1 = Copy4 - ImageCharge[j][0];
+						deltay1 = Copy5 - ImageCharge[j][1];
+						deltaz1 = Copy6 - ImageCharge[j][2];
 						delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
 						pottarg2 = pottarg2 + Para / delta1;
 					}
 					Near[i] = pottarg2 - pottarg;
-				}
 			}
 #endif
 		}
@@ -1166,15 +1156,11 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 				}
 			}
 #else
-		double Paramet1[ImageNumber];
+		double Paramet[ImageNumber];
 		for (int i = 0; i < ImageNumber; i++)
 		{
-			Paramet1[i] = ImageCharge[i][3];
+			Paramet[i] = ImageCharge[i][3];
 		}
-		double Paramet[ImageNumber];
-		memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
-		double Image[ImageNumber][4];
-		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
 		double pottarg, fldtarg, pottarg2, fldtarg2;
 		double deltax, deltay, delta;
 		double deltaz;
@@ -1183,10 +1169,8 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 	#if defined(_OPENMP)
 		#pragma omp parallel for
 	#endif
-		for (int i0 = 0; i0 < Nw; i0 += 20)
+		for (int i = 0; i < Nw; i++ )
 		{
-			for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
-			{
 				pottarg = 0.00;
 				fldtarg = 0.00;
 				pottarg2 = 0.00;
@@ -1194,20 +1178,19 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 				double Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
 				for (int j = 0; j < ImageNumber; j++)
 				{
-					deltax = Copy1 - Image[j][0];
-					deltay = Copy2 - Image[j][1];
-					deltaz = Copy3 - Image[j][2];
+					deltax = Copy1 - ImageCharge[j][0];
+					deltay = Copy2 - ImageCharge[j][1];
+					deltaz = Copy3 - ImageCharge[j][2];
 					double Para = Paramet[j];
 					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
 					pottarg = pottarg + Para / delta;
-					deltax1 = Copy4 - Image[j][0];
-					deltay1 = Copy5 - Image[j][1];
-					deltaz1 = Copy6 - Image[j][2];
+					deltax1 = Copy4 - ImageCharge[j][0];
+					deltay1 = Copy5 - ImageCharge[j][1];
+					deltaz1 = Copy6 - ImageCharge[j][2];
 					delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
 					pottarg2 = pottarg2 + Para / delta1;
 				}
 				Near[i] = pottarg2 - pottarg;
-			}
 		}
 #endif
 		}
@@ -1216,7 +1199,7 @@ void HSMA3D::CalculateNearFieldAndZD(double* Near, double ImageCharge[][4], int 
 
 void HSMA3D::SolveLeastSquareProblem(double* C, double** A, double* Near, int p, int Nw)
 {
-#if defined(LMP_USE_MKL_RNG)
+//#if defined(LMP_USE_MKL_RNG) || defined(MKL)
 	int rowAT, columnATA, columnAT;
 	double alpha, beta;
 	rowAT = p * p - 1; columnAT = Nw; columnATA = p * p - 1;
@@ -1262,9 +1245,9 @@ void HSMA3D::SolveLeastSquareProblem(double* C, double** A, double* Near, int p,
 	{
 		C[i + 1] = INV_ATA_ATB[i];
 	}
-#else
-	error->all(FLERR, "The HSMA requires INTEL-MKL library");
-#endif
+//#else
+//	error->all(FLERR, "The HSMA requires INTEL-MKL library");
+//#endif
 }
 
 double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, double Source[][3], double* Q, int NSource, double ImageCharge[][4], int ImageNumber, double **Fibonacci, double** QRD, double** QLocalRD, double* C, int p, double Fp, double F, double Rs, double PI, int IF_FMM_FinalPotential, double tolerance)
@@ -1401,8 +1384,7 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
 		}
 		double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
-		double CC[p * p];
-		memcpy(CC, C, sizeof(double) * p * p);
+
 	#if defined(_OPENMP)
 		#pragma omp parallel for
     #endif
@@ -1415,10 +1397,10 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			float a = 0.00, b = 0.00, c = 0.00, d = 0.00;
 			for (int j = 0; j < p * p; j++)
 			{
-				a = a + QF[j] * CC[j];
-				b = b + QFX[j] * CC[j];
-				c = c + QFY[j] * CC[j];
-				d = d + QFZ[j] * CC[j];
+				a = a + QF[j] * C[j];
+				b = b + QFX[j] * C[j];
+				c = c + QFY[j] * C[j];
+				d = d + QFZ[j] * C[j];
 			}
 			EF[i] = EF[i] + a;
 			EFX[i] = EFX[i] + b;
@@ -1435,8 +1417,6 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 		{
 			QImage[j] = ImageCharge[j][3];
 		}
-		double Image[ImageNumber][4];
-		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
 		float deltax, deltay, deltaz, delta;
 	#if defined(_OPENMP)
 		#pragma omp parallel for
@@ -1446,9 +1426,9 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			float a = 0.00, b = 0.00, c = 0.00, d = 0.00;
 			for (int j = 0; j < ImageNumber; j++)
 			{
-				deltax = (Image[j][0] - Source[i][0]);
-				deltay = (Image[j][1] - Source[i][1]);
-				deltaz = (Image[j][2] - Source[i][2]);
+				deltax = (ImageCharge[j][0] - Source[i][0]);
+				deltay = (ImageCharge[j][1] - Source[i][1]);
+				deltaz = (ImageCharge[j][2] - Source[i][2]);
 				delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
 				if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
 				{
@@ -1603,8 +1583,7 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
 		}
 		double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
-		double CC[p * p];
-		memcpy(CC, C, sizeof(double) * p * p);
+
 	#if defined(_OPENMP)
 		#pragma omp parallel for
 	#endif
@@ -1617,10 +1596,10 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
 			for (int j = 0; j < p * p; j++)
 			{
-				a = a + QF[j] * CC[j];
-				b = b + QFX[j] * CC[j];
-				c = c + QFY[j] * CC[j];
-				d = d + QFZ[j] * CC[j];
+				a = a + QF[j] * C[j];
+				b = b + QFX[j] * C[j];
+				c = c + QFY[j] * C[j];
+				d = d + QFZ[j] * C[j];
 			}
 			EF[i] = EF[i] + a;
 			EFX[i] = EFX[i] + b;
@@ -1637,8 +1616,6 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 		{
 			QImage[j] = ImageCharge[j][3];
 		}
-		double Image[ImageNumber][4];
-		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
 		double deltax, deltay, deltaz, delta;
 	#if defined(_OPENMP)
 		#pragma omp parallel for
@@ -1648,9 +1625,9 @@ double HSMA3D::FinalCalculateEnergyAndForce(double Force[][3], double* Pot, doub
 			double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
 			for (int j = 0; j < ImageNumber; j++)
 			{
-				deltax = (Image[j][0] - Source[i][0]);
-				deltay = (Image[j][1] - Source[i][1]);
-				deltaz = (Image[j][2] - Source[i][2]);
+				deltax = (ImageCharge[j][0] - Source[i][0]);
+				deltay = (ImageCharge[j][1] - Source[i][1]);
+				deltaz = (ImageCharge[j][2] - Source[i][2]);
 				delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
 				if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
 				{
@@ -1935,15 +1912,11 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 				}
 			}
 #else
-		float Paramet1[ImageNumber];
+		float Paramet[ImageNumber];
 		for (int i = 0; i < ImageNumber; i++)
 		{
-			Paramet1[i] = ImageCharge[i][3];
+			Paramet[i] = ImageCharge[i][3];
 		}
-		double Paramet[ImageNumber];
-		memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
-		double Image[ImageNumber][4];
-		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
 		float pottarg, fldtarg, pottarg2, fldtarg2;
 		float deltax, deltay, delta;
 		float deltaz;
@@ -1953,10 +1926,8 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 	#if defined(_OPENMP)
 		#pragma omp parallel for
 	#endif
-		for (int i0 = 0; i0 < Nw; i0 += 20)
+		for (int i = 0; i < Nw; i++)
 		{
-			for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
-			{
 				pottarg = 0.00;
 				fldtarg = 0.00;
 				pottarg2 = 0.00;
@@ -1964,36 +1935,33 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 				float Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
 				for (int j = 0; j < ImageNumber; j++)
 				{
-					deltax = Copy1 - Image[j][0];
-					deltay = Copy2 - Image[j][1];
-					deltaz = Copy3 - Image[j][2];
+					deltax = Copy1 - ImageCharge[j][0];
+					deltay = Copy2 - ImageCharge[j][1];
+					deltaz = Copy3 - ImageCharge[j][2];
 					float Para = Paramet[j];
 					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
 					pottarg = pottarg + Para / delta;
-					deltax1 = Copy4 - Image[j][0];
-					deltay1 = Copy5 - Image[j][1];
-					deltaz1 = Copy6 - Image[j][2];
+					deltax1 = Copy4 - ImageCharge[j][0];
+					deltay1 = Copy5 - ImageCharge[j][1];
+					deltaz1 = Copy6 - ImageCharge[j][2];
 					delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
 					pottarg2 = pottarg2 + Para / delta1;
 				}
 				Near[i] = pottarg2 - pottarg;
-			}
 		}
 
 	#if defined(_OPENMP)
 		#pragma omp parallel for
 	#endif
-		for (int i0 = 0; i0 < NSource; i0 += 20)
+		for (int i = 0; i < NSource; i++)
 		{
-			for (int i = i0; i < (i0 + 20 < NSource ? i0 + 20 : NSource); i++)
-			{
 				float a = 0.00, b = 0.00, c = 0.00, d = 0.00;
 				for (int j = 0; j < ImageNumber; j++)
 				{
-					deltax = (Image[j][0] - Source[i][0]);
-					deltay = (Image[j][1] - Source[i][1]);
-					deltaz = (Image[j][2] - Source[i][2]);
-					float QImage = Image[j][3];
+					deltax = (ImageCharge[j][0] - Source[i][0]);
+					deltay = (ImageCharge[j][1] - Source[i][1]);
+					deltaz = (ImageCharge[j][2] - Source[i][2]);
+					float QImage = ImageCharge[j][3];
 					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
 					if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
 					{
@@ -2007,7 +1975,6 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 				Force[i][0] = -b * Q[i];
 				Force[i][1] = -c * Q[i];
 				Force[i][2] = -d * Q[i];
-			}
 		}
 #endif
 		}
@@ -2121,15 +2088,11 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 				}
 			}
 #else
-		double Paramet1[ImageNumber];
+		double Paramet[ImageNumber];
 		for (int i = 0; i < ImageNumber; i++)
 		{
-			Paramet1[i] = ImageCharge[i][3];
+			Paramet[i] = ImageCharge[i][3];
 		}
-		double Paramet[ImageNumber];
-		memcpy(Paramet, Paramet1, sizeof(double) * ImageNumber);
-		double Image[ImageNumber][4];
-		memcpy((double*)Image, (double*)ImageCharge, sizeof(double) * 4 * ImageNumber);
 		double pottarg, fldtarg, pottarg2, fldtarg2;
 		double deltax, deltay, delta;
 		double deltaz;
@@ -2140,10 +2103,8 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 	#if defined(_OPENMP)
 		#pragma omp parallel for
 	#endif
-		for (int i0 = 0; i0 < Nw; i0 += 20)
+		for (int i = 0; i < Nw; i++)
 		{
-			for (int i = i0; i < (i0 + 20 < Nw ? i0 + 20 : Nw); i++)
-			{
 				pottarg = 0.00;
 				fldtarg = 0.00;
 				pottarg2 = 0.00;
@@ -2151,36 +2112,33 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 				double Copy1 = PointSum[i][0], Copy2 = PointSum[i][1], Copy3 = PointSum[i][2], Copy4 = QuizSum[i][0], Copy5 = QuizSum[i][1], Copy6 = QuizSum[i][2];
 				for (int j = 0; j < ImageNumber; j++)
 				{
-					deltax = Copy1 - Image[j][0];
-					deltay = Copy2 - Image[j][1];
-					deltaz = Copy3 - Image[j][2];
+					deltax = Copy1 - ImageCharge[j][0];
+					deltay = Copy2 - ImageCharge[j][1];
+					deltaz = Copy3 - ImageCharge[j][2];
 					double Para = Paramet[j];
 					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
 					pottarg = pottarg + Para / delta;
-					deltax1 = Copy4 - Image[j][0];
-					deltay1 = Copy5 - Image[j][1];
-					deltaz1 = Copy6 - Image[j][2];
+					deltax1 = Copy4 - ImageCharge[j][0];
+					deltay1 = Copy5 - ImageCharge[j][1];
+					deltaz1 = Copy6 - ImageCharge[j][2];
 					delta1 = sqrt(deltax1 * deltax1 + deltay1 * deltay1 + deltaz1 * deltaz1);
 					pottarg2 = pottarg2 + Para / delta1;
 				}
 				Near[i] = pottarg2 - pottarg;
-			}
 		}
 
 	#if defined(_OPENMP)
 		#pragma omp parallel for
 	#endif
-		for (int i0 = 0; i0 < NSource; i0 += 20)
+		for (int i = 0; i < NSource; i++)
 		{
-			for (int i = i0; i < (i0 + 20 < NSource ? i0 + 20 : NSource); i++)
-			{
 				double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
 				for (int j = 0; j < ImageNumber; j++)
 				{
-					deltax = (Image[j][0] - Source[i][0]);
-					deltay = (Image[j][1] - Source[i][1]);
-					deltaz = (Image[j][2] - Source[i][2]);
-					double QImage = Image[j][3];
+					deltax = (ImageCharge[j][0] - Source[i][0]);
+					deltay = (ImageCharge[j][1] - Source[i][1]);
+					deltaz = (ImageCharge[j][2] - Source[i][2]);
+					double QImage = ImageCharge[j][3];
 					delta = sqrt(deltax * deltax + deltay * deltay + deltaz * deltaz);
 					if (!((fabs(deltax) < 1.0e-13) && (fabs(deltay) < 1.0e-13) && (fabs(deltaz) < 1.0e-13)))
 					{
@@ -2194,7 +2152,6 @@ void HSMA3D::CalculateNearFieldAndZD_Single(double* Near, double ImageCharge[][4
 				Force[i][0] = -b * Q[i];
 				Force[i][1] = -c * Q[i];
 				Force[i][2] = -d * Q[i];
-			}
 		}
 #endif
 		}
@@ -2283,8 +2240,7 @@ double HSMA3D::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Po
 			EF[i] = 0.00; EFX[i] = 0.00; EFY[i] = 0.00; EFZ[i] = 0.00;
 		}
 		double QF[p * p], QFX[p * p], QFY[p * p], QFZ[p * p];
-		double CC[p * p];
-		memcpy(CC, C, sizeof(double) * p * p);
+
 	#if defined(_OPENMP)
 		#pragma omp parallel for
 	#endif
@@ -2297,10 +2253,10 @@ double HSMA3D::FinalCalculateEnergyAndForce_Single(double Force[][3], double* Po
 			double a = 0.00, b = 0.00, c = 0.00, d = 0.00;
 			for (int j = 0; j < p * p; j++)
 			{
-				a = a + QF[j] * CC[j];
-				b = b + QFX[j] * CC[j];
-				c = c + QFY[j] * CC[j];
-				d = d + QFZ[j] * CC[j];
+				a = a + QF[j] * C[j];
+				b = b + QFX[j] * C[j];
+				c = c + QFY[j] * C[j];
+				d = d + QFZ[j] * C[j];
 			}
 			EF[i] = EF[i] + a;
 			EFX[i] = EFX[i] + b;
