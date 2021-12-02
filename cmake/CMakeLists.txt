@@ -192,6 +192,7 @@ set(STANDARD_PACKAGES
   FEP
   GRANULAR
   H5MD
+  HSMA
   INTERLAYER
   KIM
   KSPACE
@@ -341,6 +342,7 @@ pkg_depends(ATC MANYBODY)
 pkg_depends(LATBOLTZ MPI)
 pkg_depends(PHONON KSPACE)
 pkg_depends(SCAFACOS MPI)
+pkg_depends(HSMA KSPACE)
 pkg_depends(DIELECTRIC KSPACE)
 pkg_depends(DIELECTRIC EXTRA-PAIR)
 pkg_depends(CG-DNA MOLECULE)
@@ -399,6 +401,14 @@ if(PKG_MSCG OR PKG_ATC OR PKG_AWPMD OR PKG_ML-QUIP OR PKG_LATTE)
     list(APPEND LAPACK_LIBRARIES ${BLAS_LIBRARIES})
   endif()
 endif()
+
+if(PKG_HSMA)
+  find_package(MKL)
+  file(GLOB HSMA_SOURCES "../src/HSMA/OFile/*.o")
+  target_link_libraries(lammps PRIVATE ${HSMA_SOURCES})
+  set(CMAKE_CXX_FLAGS "-lgfortran -ldl -lmkl_rt ${CMAKE_CXX_FLAGS}")
+endif()
+
 
 # tweak jpeg library names to avoid linker errors with MinGW cross-compilation
 set(JPEG_NAMES libjpeg libjpeg-62)
@@ -466,7 +476,7 @@ foreach(PKG_WITH_INCL KSPACE PYTHON ML-IAP VORONOI COLVARS ML-HDNNP MDI MOLFILE 
   if(PKG_${PKG_WITH_INCL})
     include(Packages/${PKG_WITH_INCL})
   endif()
-endforeach()
+endforeach() 
 
 # optionally enable building script wrappers using swig
 option(WITH_SWIG "Build scripting language wrappers with SWIG" OFF)
@@ -604,6 +614,7 @@ endif()
 if(PKG_H5MD)
   include(Packages/H5MD)
 endif()
+
 
 ######################################################################
 # packages which selectively include variants based on enabled styles
