@@ -43,12 +43,7 @@ which is our recommendation. Other options are also OK like `make omp`, but one 
 Note that if you want to use HSMA with your own LAMMPS, please just copy /src/HSMA to your lammps/src catalogue, and then refer to the same installation procedure listed in this part.
 
 ## Installation with Cmake (ongoing)
-Compiling HSMA using Cmake is still an ongoing project. In the current version, one can first compile the FMM library under `./src/HSMA/OFile` catalogue using
-```
-unzip HSMA1.0.0.zip
-make all
-```
-Then, a minimal example using the command line version of CMake to build HSMA in LAMMPS is as follows
+Compiling HSMA using Cmake is still an ongoing project. In this version, one can use a minimal example using the command line version of CMake to build HSMA in LAMMPS is as follows
 ```
 cd lammps                # change to the LAMMPS distribution directory
 mkdir build; cd build    # create and use a build directory
