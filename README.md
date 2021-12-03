@@ -1,6 +1,16 @@
 # Harmonic-surface-mapping-algorithm-in-LAMMPS
 [HSMA3D](https://aip.scitation.org/doi/10.1063/1.5044438) and [HSMA2D](https://aip.scitation.org/doi/10.1063/5.0003293) (with planar dielectric interfaces) have been implemented into LAMMPS as a k-space module. This module is written via C++ and is paralleled via MPI + OpenMP. We recommend user install 'user-omp' package in Lammps. Fewer MPIs and more OpenMPs are the most efficient choice. We suggest not to use pure MPI. With optimal choice of parameters, the speed of this package is comparable to PPPM (with Intel optimization) in LAMMPS, or even faster than it. This package requires the Intel Parallel Studio or at least the Intel MKL library for solving the least square problem. We offer installation with both `make` and `cmake` (recommended) procedure.
 
+## Installation with Cmake (recommended)
+Compiling HSMA using Cmake is a recently-developed project. In this version, one can use a minimal example using the command line version of CMake to build HSMA in LAMMPS is as follows
+```
+cd lammps                # change to the LAMMPS distribution directory
+mkdir build; cd build    # create and use a build directory
+cmake -C ../cmake/presets/intel.cmake ../cmake # configuration reading CMake scripts from ../cmake
+cmake -D PKG_HSMA=on -D PKG_INTEL=on -D PKG_MOLECULE=on -D PKG_KSPACE=on -D PKG_MANYBODY=on -D INTEL_ARCH=cpu . # include package
+cmake --build .          # compilation (or type "make")
+```
+
 ## Installation with make
 For employing HSMA3D after download this full package, the first thing is to include the HSMA package and other appropriate packages in your LAMMPS (cd ./src catalogue):
 ```
@@ -41,16 +51,6 @@ make intel_cpu_intelmpi
 which is our recommendation. Other options are also OK like `make omp`, but one should add the dependency `-fopenmp -lmkl_rt` at the end of `PKG_PATH` in `src/Makefile.package` file.
 
 Note that if you want to use HSMA with your own LAMMPS, please just copy /src/HSMA to your lammps/src catalogue, and then refer to the same installation procedure listed in this part.
-
-## Installation with Cmake (recommended)
-Compiling HSMA using Cmake is a recently-developed project. In this version, one can use a minimal example using the command line version of CMake to build HSMA in LAMMPS is as follows
-```
-cd lammps                # change to the LAMMPS distribution directory
-mkdir build; cd build    # create and use a build directory
-cmake -C ../cmake/presets/intel.cmake ../cmake # configuration reading CMake scripts from ../cmake
-cmake -D PKG_HSMA=on -D PKG_INTEL=on -D PKG_MOLECULE=on -D PKG_KSPACE=on -D PKG_MANYBODY=on -D INTEL_ARCH=cpu . # include package
-cmake --build .          # compilation (or type "make")
-```
 
 ## User guide
 For employing HSMA3D, the only thing needed is to change the k-space solver in your Lammps in-file, just as 
