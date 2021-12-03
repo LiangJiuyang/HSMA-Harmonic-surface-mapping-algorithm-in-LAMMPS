@@ -10,7 +10,7 @@ export OMP_NUM_THREADS=40
 srun --mpi=pmi2 -n 1 ../src/lmp_intel_cpu_intelmpi -i salt_3-1.in
 ```
 
-#Use cmake for installing
+#Use `cmake` for installing
 ```
 srun --mpi=pmi2 -n 1 ../build/lmp -i salt_3-1.in
 ```
