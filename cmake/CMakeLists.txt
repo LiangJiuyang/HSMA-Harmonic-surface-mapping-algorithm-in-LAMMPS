@@ -403,7 +403,7 @@ if(PKG_MSCG OR PKG_ATC OR PKG_AWPMD OR PKG_ML-QUIP OR PKG_LATTE)
 endif()
 
 if(PKG_HSMA)
-  find_package(MKL REQUIRED)
+    find_package(MKL REQUIRED)
     if(EXISTS "../src/HSMA/OFile/makefile")
        exec_program(make ../src/HSMA/OFile ARGS "clean")
     else()
