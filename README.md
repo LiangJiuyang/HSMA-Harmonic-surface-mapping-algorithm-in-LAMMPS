@@ -137,7 +137,7 @@ If you use this package in your work and feel that this package is helpful to yo
 
 1. [Q. Zhao, J. Liang, and Z. Xu, J. Chem. Phys. 149, 084111 (2018).](https://aip.scitation.org/doi/10.1063/1.5044438)
 2. [J. Liang, J. Yuan, E. Luijten, and Z. Xu, J. Chem. Phys. 152, 134109 (2020).](https://aip.scitation.org/doi/10.1063/5.0003293)
-3. [J. Liang, J. Yuan, and Z. Xu, preprint (2021).](https://arxiv.org/abs/2104.05260)
+3. [J. Liang, J. Yuan, and Z. Xu, Comput. Phys. Commun. 276, 108332 (2022).](https://www.sciencedirect.com/science/article/pii/S0010465522000509?via%3Dihub)
 
 This version still need optimization. If you have any questions and suggestions, please send an email to liangjiuyang@sjtu.edu.cn (both Chinese and English are OK).
 
@@ -154,7 +154,7 @@ Now, we implement two recently developed fast Coulomb solvers, HSMA3D [J. Chem. 
                            Jiuyang Liang
                            Ph.D candidate
                            School of Mathematical Science and Institute of Natural Science
-                           Shang Hai Jiao Tong University
+                           Shanghai Jiao Tong University
                            [Homepage in Github](https://github.com/LiangJiuyang/)
                            [Homepage in Researchgate](https://www.researchgate.net/profile/Liang-Jiuyang)
 ```
