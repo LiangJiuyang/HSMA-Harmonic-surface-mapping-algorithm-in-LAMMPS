@@ -158,3 +158,7 @@ Now, we implement two recently developed fast Coulomb solvers, HSMA3D [J. Chem. 
                            [Homepage in Github](https://github.com/LiangJiuyang/)
                            [Homepage in Researchgate](https://www.researchgate.net/profile/Liang-Jiuyang)
 ```
+
+
+
+<a href="https://info.flagcounter.com/teQT"><img src="https://s01.flagcounter.com/count2/teQT/bg_FFFFFF/txt_000000/border_CCCCCC/columns_5/maxflags_12/viewers_People/labels_0/pageviews_0/flags_0/percent_0/" alt="Flag Counter" border="0"></a>
